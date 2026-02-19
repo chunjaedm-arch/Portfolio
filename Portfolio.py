@@ -37,9 +37,10 @@ class Preloader(QThread):
     def run(self):
         try:
             # 1. 환율 조회
-            usd, jpy, brl, source = self.api_manager.fetch_exchange_rates()
+            usd, jpy, cny, brl, source = self.api_manager.fetch_exchange_rates()
             usd_rate = usd if usd is not None else 0.0
             jpy_rate = jpy if jpy is not None else 0.0
+            cny_rate = cny if cny is not None else 0.0
             brl_rate = brl if brl is not None else 0.0
 
             # 2. 금 시세 및 코인 프리미엄 조회
@@ -52,6 +53,7 @@ class Preloader(QThread):
             self.finished_data.emit({
                 "usd_rate": usd_rate,
                 "jpy_rate": jpy_rate,
+                "cny_rate": cny_rate,
                 "brl_rate": brl_rate,
                 "gold_prices": gold_prices,
                 "upbit_usdt": upbit_usdt,
@@ -79,6 +81,7 @@ class PortfolioLoader(QThread):
             if self.preloaded_data:
                 usd_rate = self.preloaded_data.get('usd_rate', 0.0)
                 jpy_rate = self.preloaded_data.get('jpy_rate', 0.0)
+                cny_rate = self.preloaded_data.get('cny_rate', 0.0)
                 brl_rate = self.preloaded_data.get('brl_rate', 0.0)
                 gold_prices = self.preloaded_data.get('gold_prices', {})
                 upbit_usdt = self.preloaded_data.get('upbit_usdt', 0.0)
@@ -86,9 +89,10 @@ class PortfolioLoader(QThread):
                 source = self.preloaded_data.get('source', '-')
             else:
                 # 1. 환율 조회
-                usd, jpy, brl, source = self.api_manager.fetch_exchange_rates()
+                usd, jpy, cny, brl, source = self.api_manager.fetch_exchange_rates()
                 usd_rate = usd if usd is not None else 0.0
                 jpy_rate = jpy if jpy is not None else 0.0
+                cny_rate = cny if cny is not None else 0.0
                 brl_rate = brl if brl is not None else 0.0
 
                 # 2. 금 시세 및 코인 프리미엄 조회
@@ -103,12 +107,13 @@ class PortfolioLoader(QThread):
             docs = data.get('documents', [])
 
             items, f_total, all_total, invest_total, quote_source = self.data_processor.process_portfolio_data(
-                docs, usd_rate, jpy_rate, brl_rate, gold_prices, self.api_manager
+                docs, usd_rate, jpy_rate, cny_rate, brl_rate, gold_prices, self.api_manager
             )
 
             result = {
                 "usd_rate": usd_rate,
                 "jpy_rate": jpy_rate,
+                "cny_rate": cny_rate,
                 "brl_rate": brl_rate,
                 "gold_prices": gold_prices,
                 "upbit_usdt": upbit_usdt,
@@ -137,6 +142,7 @@ class PortfolioApp(QMainWindow):
         self.is_retrying = False
         self.usd_rate = None
         self.jpy_rate = None
+        self.cny_rate = 0.0
         self.brl_rate = 0.0
         self.history_cache = []
         self.history_loaded = False
@@ -411,7 +417,7 @@ class PortfolioApp(QMainWindow):
             self.fetch_history()
 
         g_info = getattr(self, 'current_gold_info', {})
-        raw_summary = self.dashboard_view.get_summary_info(self.usd_rate, self.jpy_rate, self.brl_rate, g_info)
+        raw_summary = self.dashboard_view.get_summary_info(self.usd_rate, self.jpy_rate, self.cny_rate, self.brl_rate, g_info)
         
         # AI 분석을 위한 요약 데이터 가공
         summary_info = {}
@@ -503,10 +509,11 @@ class PortfolioApp(QMainWindow):
 
     def refresh_exchange_rates(self):
         try:
-            usd, jpy, brl, source = self.api_manager.fetch_exchange_rates()
-            if usd is not None and jpy is not None and brl is not None:
+            usd, jpy, cny, brl, source = self.api_manager.fetch_exchange_rates()
+            if usd is not None and jpy is not None and cny is not None and brl is not None:
                 self.usd_rate = usd
                 self.jpy_rate = jpy
+                self.cny_rate = cny
                 self.brl_rate = brl
                 self.source_label.setText(f"Source: {source}")
             else:
@@ -518,6 +525,7 @@ class PortfolioApp(QMainWindow):
             if self.usd_rate is None or self.usd_rate == 0.0:
                 self.usd_rate = 0.0
                 self.jpy_rate = 0.0
+                self.cny_rate = 0.0
                 self.brl_rate = 0.0
 
     def check_and_update_peak(self, current_f_total):
@@ -569,6 +577,7 @@ class PortfolioApp(QMainWindow):
             # 1. 데이터 언패킹 및 상태 업데이트
             self.usd_rate = data['usd_rate']
             self.jpy_rate = data['jpy_rate']
+            self.cny_rate = data.get('cny_rate', 0.0)
             self.brl_rate = data.get('brl_rate', 0.0)
             self.current_gold_info = data['gold_prices']
             self.current_items = data['items']
@@ -583,7 +592,7 @@ class PortfolioApp(QMainWindow):
 
             # 2. 대시보드 업데이트
             self.dashboard_view.update_market_indicators(
-                self.usd_rate, self.jpy_rate, self.brl_rate, self.current_gold_info, data['upbit_usdt'], data.get('indices')
+                self.usd_rate, self.jpy_rate, self.cny_rate, self.brl_rate, self.current_gold_info, data['upbit_usdt'], data.get('indices')
             )
 
             # 3. 자산 목록 UI 구성
@@ -711,7 +720,7 @@ class PortfolioApp(QMainWindow):
 
         gold_info = getattr(self, 'current_gold_info', {})
         success, c_krw, c_usd, c_jpy, c_prev, updated_at, market_status = self.data_processor.calculate_asset_values(
-            ticker, qty, note, gold_info, self.api_manager, sub, self.brl_rate, self.usd_rate or 0.0, self.jpy_rate or 0.0
+            ticker, qty, note, gold_info, self.api_manager, sub, self.usd_rate or 0.0, self.jpy_rate or 0.0, self.cny_rate or 0.0, self.brl_rate
         )
         
         if success:

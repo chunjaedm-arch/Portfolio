@@ -43,9 +43,10 @@ def main():
         return
 
     print("2. 시장 데이터 수집 중...")
-    usd, jpy, brl, _ = api_manager.fetch_exchange_rates()
+    usd, jpy, cny, brl, _ = api_manager.fetch_exchange_rates()
     usd = usd or 0.0
     jpy = jpy or 0.0
+    cny = cny or 0.0
     brl = brl or 0.0
     
     gold_prices = api_manager.get_detailed_gold_prices(usd)
@@ -58,7 +59,7 @@ def main():
     
     # GUI 없이 데이터 처리만 수행
     items, f_total, all_total, invest_total, _ = data_processor.process_portfolio_data(
-        docs, usd, jpy, brl, gold_prices, api_manager
+        docs, usd, jpy, cny, brl, gold_prices, api_manager
     )
 
     # 히스토리 및 통계 데이터 로드 (MDD, Peak 계산용)
@@ -78,6 +79,9 @@ def main():
             "deposit": get_val('net_deposit')
         })
     history_cache.sort(key=lambda x: x['date'])
+
+    # 수익률 및 증감률 계산
+    roi, growth = data_processor.calculate_metrics(f_total, all_total, history_cache)
 
     stats_resp = db_manager.get_stats(id_token)
     stats_fields = stats_resp.get('fields', {})
@@ -99,8 +103,12 @@ def main():
     
     message = f"📊 **Daily Asset Summary**\n`{now_str}`\n\n"
     
-    message += f"💰 **총 자산**: ₩{all_total:,.0f}\n"
-    message += f"🏦 **금융 자산**: ₩{f_total:,.0f}\n"
+    growth_str = f" ({growth:+.2f}%)" if growth is not None else ""
+    message += f"💰 **총 자산**: ₩{all_total:,.0f}{growth_str}\n"
+    
+    roi_str = f" ({roi:+.2f}%)" if roi is not None else ""
+    message += f"🏦 **금융 자산**: ₩{f_total:,.0f}{roi_str}\n"
+    
     message += f"📈 **투자 자산**: ₩{invest_total:,.0f}\n"
     peak_date_str = display_peak_date[2:] if len(display_peak_date) == 8 else display_peak_date
     message += f"🏆 **MAX-{peak_date_str}**: ₩{display_peak:,.0f}\n"
@@ -110,6 +118,7 @@ def main():
     message += "💱 **환율 정보**\n"
     message += f"🇺🇸 USD: {usd:,.2f}원\n"
     message += f"🇯🇵 JPY: {jpy*100:,.2f}원\n"
+    message += f"🇨🇳 CNY: {cny:,.2f}원\n"
     message += f"🇧🇷 BRL: {brl:,.2f}원\n"
     
     message += "\n━━━━━━━━━━━━━━\n"
@@ -134,8 +143,8 @@ def main():
         message += f"⚖️ 금 스프레드: {spread:+.2f}%\n"
     
     message += "\n🌍 **주요 지수**\n"
-    # 표시 순서: KOSPI, KOSDAQ, S&P500, NASDAQ, VIX, US10Y
-    target_indices = ["KOSPI", "KOSDAQ", "S&P500", "NASDAQ", "VIX", "US10Y"]
+    # 표시 순서: KOSPI, KOSDAQ, S&P500, NASDAQ, Nikkei225, HangSeng, VIX, US10Y
+    target_indices = ["KOSPI", "KOSDAQ", "S&P500", "NASDAQ", "Nikkei225", "HangSeng", "VIX", "US10Y"]
     for name in target_indices:
         if name in indices:
             val, chg = indices[name]
