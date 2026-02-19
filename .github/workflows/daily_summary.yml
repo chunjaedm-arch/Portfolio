@@ -2,9 +2,12 @@ name: Daily Portfolio Summary
 
 on:
   schedule:
-    # 매일 한국 시간 오전 9시 실행 (UTC 00:00)
-    - cron: '0 0 * * *'
-  workflow_dispatch: # 수동 실행 버튼 활성화
+    - cron: '30 0 * * *'   # 한국 시간 오전 9시 30분
+    - cron: '20 3 * * *'   # 한국 시간 낮 12시 20분
+    - cron: '0 7 * * *'    # 한국 시간 오후 4시 00분
+    - cron: '0 12 * * *'   # 한국 시간 오후 9시 00분
+    - cron: '0 14 * * *'   # 한국 시간 오후 11시 00분
+  workflow_dispatch:
 
 jobs:
   run-summary:

@@ -50,6 +50,7 @@ def main():
     
     gold_prices = api_manager.get_detailed_gold_prices(usd)
     indices = api_manager.fetch_market_indices()
+    upbit_usdt, _ = api_manager.get_upbit_price("USDT")
 
     print("3. 포트폴리오 데이터 계산 중...")
     data = db_manager.fetch_portfolio(id_token)
@@ -59,6 +60,37 @@ def main():
     items, f_total, all_total, invest_total, _ = data_processor.process_portfolio_data(
         docs, usd, jpy, brl, gold_prices, api_manager
     )
+
+    # 히스토리 및 통계 데이터 로드 (MDD, Peak 계산용)
+    history_resp = db_manager.fetch_history(id_token)
+    history_docs = history_resp.get('documents', [])
+    history_cache = []
+    for doc in history_docs:
+        date_id = doc['name'].split('/')[-1]
+        f = doc.get('fields', {})
+        def get_val(field):
+            v = f.get(field, {})
+            return float(v.get('doubleValue', v.get('integerValue', 0)))
+        history_cache.append({
+            "date": date_id,
+            "f_asset": get_val('financial_asset'),
+            "t_asset": get_val('total_asset') or get_val('asset_value'),
+            "deposit": get_val('net_deposit')
+        })
+    history_cache.sort(key=lambda x: x['date'])
+
+    stats_resp = db_manager.get_stats(id_token)
+    stats_fields = stats_resp.get('fields', {})
+    val = stats_fields.get('peak_financial_asset', {})
+    peak_f_asset = float(val.get('doubleValue', val.get('integerValue', 0)))
+    ts = stats_fields.get('updated_at', {}).get('timestampValue', '')
+    peak_date = ts[:10].replace("-", "") if ts else "-"
+
+    # Peak 갱신 여부 확인 및 MDD 계산
+    is_new_peak, adjusted_current = data_processor.check_peak_update(f_total, peak_f_asset, peak_date, history_cache)
+    display_peak = adjusted_current if is_new_peak else peak_f_asset
+    display_peak_date = datetime.now().strftime("%Y%m%d") if is_new_peak else peak_date
+    mdd_val, mdd_pct = data_processor.calculate_mdd(f_total, display_peak, display_peak_date, history_cache)
 
     print("4. 메시지 작성 중...")
     # KST 시간 설정 (UTC+9)
@@ -70,11 +102,36 @@ def main():
     message += f"💰 **총 자산**: ₩{all_total:,.0f}\n"
     message += f"🏦 **금융 자산**: ₩{f_total:,.0f}\n"
     message += f"📈 **투자 자산**: ₩{invest_total:,.0f}\n"
+    peak_date_str = display_peak_date[2:] if len(display_peak_date) == 8 else display_peak_date
+    message += f"🏆 **MAX-{peak_date_str}**: ₩{display_peak:,.0f}\n"
+    message += f"📉 **DD**: ₩{mdd_val:,.0f} ({mdd_pct:.2f}%)\n"
     
     message += "\n━━━━━━━━━━━━━━\n"
     message += "💱 **환율 정보**\n"
     message += f"🇺🇸 USD: {usd:,.2f}원\n"
     message += f"🇯🇵 JPY: {jpy*100:,.2f}원\n"
+    message += f"🇧🇷 BRL: {brl:,.2f}원\n"
+    
+    message += "\n━━━━━━━━━━━━━━\n"
+    message += "📊 **차익 거래**\n"
+    
+    # 김치 프리미엄
+    kimp_str = "N/A"
+    if upbit_usdt and usd > 0:
+        kimp = ((upbit_usdt / usd) - 1) * 100
+        kimp_str = f"{kimp:+.2f}%"
+    message += f"🇰🇷 코인 김프: {kimp_str}\n"
+
+    # 금 프리미엄/스프레드
+    g = gold_prices
+    if g.get('int_spot', 0) > 0:
+        krx_prem = ((g.get('krx_spot', 0) / g['int_spot']) - 1) * 100 if g.get('krx_spot') else 0
+        iau_prem = ((g.get('iau_krw_g', 0) / g['int_spot']) - 1) * 100 if g.get('iau_krw_g') else 0
+        spread = ((g.get('int_future', 0) / g['int_spot']) - 1) * 100 if g.get('int_future') else 0
+        
+        message += f"🥇 KRX 금프: {krx_prem:+.2f}%\n"
+        message += f"🇺🇸 IAU 금프: {iau_prem:+.2f}%\n"
+        message += f"⚖️ 금 스프레드: {spread:+.2f}%\n"
     
     message += "\n🌍 **주요 지수**\n"
     # 표시 순서: KOSPI, KOSDAQ, S&P500, NASDAQ, VIX, US10Y
