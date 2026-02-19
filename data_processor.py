@@ -49,7 +49,7 @@ class DataProcessor:
             print(f"도약계좌 계산 오류: {e}")
             return None
 
-    def calculate_asset_values(self, ticker, qty, note, gold_prices, api_manager, sub_category=None, brl_rate=0.0, usd_rate=0.0, jpy_rate=0.0):
+    def calculate_asset_values(self, ticker, qty, note, gold_prices, api_manager, sub_category=None, usd_rate=0.0, jpy_rate=0.0, cny_rate=0.0, brl_rate=0.0):
         updated_at = "-"
         market_status = "n/a"
         
@@ -95,6 +95,7 @@ class DataProcessor:
                                 current_rate = 1.0
                                 if currency == "USD": current_rate = usd_rate
                                 elif currency == "JPY": current_rate = jpy_rate
+                                elif currency == "CNY": current_rate = cny_rate
                                 elif currency == "BRL": current_rate = brl_rate
                                 
                                 # 평가액 = 수량 * 현재가 * 적용환율
@@ -293,7 +294,7 @@ class DataProcessor:
         
         return price_str, diff_str, diff_color
 
-    def process_portfolio_data(self, docs, usd_rate, jpy_rate, brl_rate, gold_prices, api_manager):
+    def process_portfolio_data(self, docs, usd_rate, jpy_rate, cny_rate, brl_rate, gold_prices, api_manager):
         items = []
         f_total, all_total, invest_total = 0.0, 0.0, 0.0
 
@@ -320,7 +321,7 @@ class DataProcessor:
             }
 
             success, c_krw, c_usd, c_jpy, c_prev, updated_at, market_status = self.calculate_asset_values(
-                item['ticker'], item['qty'], item['note'], gold_prices, api_manager, item['sub'], brl_rate, usd_rate, jpy_rate
+                item['ticker'], item['qty'], item['note'], gold_prices, api_manager, item['sub'], usd_rate, jpy_rate, cny_rate, brl_rate
             )
             if success:
                 item['krw'], item['usd'], item['jpy'] = c_krw, c_usd, c_jpy

@@ -62,10 +62,10 @@ class DashboardView(QWidget):
         l4.addWidget(self.mdd_pct_label, 3, 1)
         layout.addWidget(gb4, 0, 3)
 
-    def update_market_indicators(self, usd_rate, jpy_rate, brl_rate, gold_info, upbit_usdt, indices=None):
+    def update_market_indicators(self, usd_rate, jpy_rate, cny_rate, brl_rate, gold_info, upbit_usdt, indices=None):
         # 환율 업데이트
         if usd_rate and jpy_rate:
-            self.rate_label.setText(f"실시간 환율: $ {usd_rate:,.2f} / ¥ {jpy_rate*100:,.2f} / R$ {brl_rate:,.2f}")
+            self.rate_label.setText(f"실시간 환율: $ {usd_rate:,.2f} / ¥ {jpy_rate*100:,.2f} / CN¥ {cny_rate:,.2f} / R$ {brl_rate:,.2f}")
         else:
             self.rate_label.setText("⚠️ 환율 로드 실패")
 
@@ -89,6 +89,7 @@ class DashboardView(QWidget):
             groups = [
                 ["KOSPI", "KOSDAQ"], 
                 ["S&P500", "NASDAQ"], 
+                ["Nikkei225", "HangSeng"],
                 ["VIX", "US10Y"]
             ]
             
@@ -181,12 +182,13 @@ class DashboardView(QWidget):
         self.total_label.setText(f"금융자산: {f_total:,.0f}")
         self.all_total_label.setText(f"총자산: {all_total:,.0f}")
 
-    def get_summary_info(self, usd_rate, jpy_rate, brl_rate, gold_info):
+    def get_summary_info(self, usd_rate, jpy_rate, cny_rate, brl_rate, gold_info):
         def clean(txt, prefix): return txt.replace(prefix, "").strip()
         summary = {
             "기록시간": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             "USD환율": f"{usd_rate:,.2f}" if usd_rate else "0.00",
             "JPY환율(100엔)": f"{jpy_rate*100:,.2f}" if jpy_rate else "0.00",
+            "CNY환율": f"{cny_rate:,.2f}" if cny_rate else "0.00",
             "BRL환율": f"{brl_rate:,.2f}" if brl_rate else "0.00",
             "국제금(현물)": f"{gold_info.get('int_spot', 0):,.0f}",
             "국제금(선물)": f"{gold_info.get('int_future', 0):,.0f}",
@@ -207,7 +209,7 @@ class DashboardView(QWidget):
         }
 
         if self.last_indices:
-            order = ["KOSPI", "KOSDAQ", "S&P500", "NASDAQ", "VIX", "US10Y"]
+            order = ["KOSPI", "KOSDAQ", "S&P500", "NASDAQ", "Nikkei225", "HangSeng", "VIX", "US10Y"]
             for name in order:
                 if name in self.last_indices:
                     price, chg = self.last_indices[name]

@@ -10,14 +10,16 @@ class APIManager:
         try:
             usd_df = yf.Ticker("USDKRW=X").history(period="1d")
             jpy_df = yf.Ticker("JPYKRW=X").history(period="1d")
+            cny_df = yf.Ticker("CNYKRW=X").history(period="1d")
             brl_df = yf.Ticker("BRLKRW=X").history(period="1d")
 
-            if not usd_df.empty and not jpy_df.empty and not brl_df.empty:
+            if not usd_df.empty and not jpy_df.empty and not cny_df.empty and not brl_df.empty:
                 usd_rate = float(usd_df['Close'].iloc[-1])
                 raw_jpy = float(jpy_df['Close'].iloc[-1])
                 jpy_rate = raw_jpy / 100 if raw_jpy > 50 else raw_jpy
+                cny_rate = float(cny_df['Close'].iloc[-1])
                 brl_rate = float(brl_df['Close'].iloc[-1])
-                return usd_rate, jpy_rate, brl_rate, "yfinance"
+                return usd_rate, jpy_rate, cny_rate, brl_rate, "yfinance"
         except Exception as e:
             print(f"yfinance 환율 로드 실패 (FinanceDataReader로 재시도): {e}")
 
@@ -31,20 +33,22 @@ class APIManager:
             
             usd_df = fdr.DataReader('USD/KRW', start_date)
             jpy_df = fdr.DataReader('JPY/KRW', start_date)
+            cny_df = fdr.DataReader('CNY/KRW', start_date)
             brl_df = fdr.DataReader('BRL/KRW', start_date)
 
-            if not usd_df.empty and not jpy_df.empty and not brl_df.empty:
+            if not usd_df.empty and not jpy_df.empty and not cny_df.empty and not brl_df.empty:
                 usd_rate = float(usd_df['Close'].iloc[-1])
                 raw_jpy = float(jpy_df['Close'].iloc[-1])
                 
                 # JPY 처리 (100엔 단위일 경우 1엔 단위로 변환)
                 jpy_rate = raw_jpy / 100 if raw_jpy > 50 else raw_jpy
+                cny_rate = float(cny_df['Close'].iloc[-1])
                 brl_rate = float(brl_df['Close'].iloc[-1])
-                return usd_rate, jpy_rate, brl_rate, "FinanceDataReader"
+                return usd_rate, jpy_rate, cny_rate, brl_rate, "FinanceDataReader"
         except Exception as e:
             print(f"FinanceDataReader 환율 로드 실패: {e}")
         
-        return None, None, None, None
+        return None, None, None, None, None
 
     def fetch_market_indices(self):
         indices = {
@@ -52,6 +56,8 @@ class APIManager:
             "KOSDAQ": "^KQ11",
             "NASDAQ": "^NDX",
             "S&P500": "^GSPC",
+            "Nikkei225": "^N225",
+            "HangSeng": "^HSI",
             "VIX": "^VIX",
             "US10Y": "^TNX"
         }
