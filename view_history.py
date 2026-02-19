@@ -1,0 +1,363 @@
+from PyQt6.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QTreeWidget, QTreeWidgetItem,
+    QGroupBox, QGridLayout, QLabel, QLineEdit, QPushButton, QHeaderView
+)
+from PyQt6.QtCore import Qt, pyqtSignal, QSettings
+from PyQt6.QtGui import QColor, QFont
+from datetime import datetime
+
+class HistoryView(QWidget):
+    save_snapshot_requested = pyqtSignal(str, float, float, float, str)
+    delete_requested = pyqtSignal(str)
+
+    def __init__(self):
+        super().__init__()
+        self.selected_history_id = None
+        self.yearly_yield_data = []
+        self.current_f_asset = 0
+        self.current_t_asset = 0
+        self.init_ui()
+
+    def init_ui(self):
+        main_layout = QHBoxLayout(self)
+
+        left_widget = QWidget()
+        left_layout = QVBoxLayout(left_widget)
+        left_layout.setContentsMargins(0, 0, 0, 0)
+
+        self.history_sheet = QTreeWidget()
+        self.h_columns = ["날짜", "금융자산", "총자산", "순입고", "투자손익", "투자수익률", "자산증감율", "비고"]
+        self.history_sheet.setHeaderLabels(self.h_columns)
+        
+        self.history_sheet.setAlternatingRowColors(True)
+        self.history_sheet.setStyleSheet("""
+            QTreeWidget {
+                background-color: #2b2b2b;
+                alternate-background-color: #353535;
+                color: #e0e0e0;
+                gridline-color: #404040;
+            }
+            QHeaderView::section {
+                background-color: #3d3d3d;
+                color: white;
+                border: 1px solid #555;
+            }
+        """)
+
+        self.load_settings()
+
+        header = self.history_sheet.header()
+        header.setSectionsMovable(True)
+        header.setDefaultAlignment(Qt.AlignmentFlag.AlignCenter) 
+
+        for i in range(self.history_sheet.columnCount()):
+            header.setSectionResizeMode(i, QHeaderView.ResizeMode.Interactive)
+
+        header.setSectionResizeMode(7, QHeaderView.ResizeMode.Stretch)
+
+
+        self.history_sheet.itemSelectionChanged.connect(self.on_select)
+        left_layout.addWidget(self.history_sheet)
+
+        self.create_edit_area(left_layout)
+
+        self.yield_panel = QWidget()
+        self.yield_layout = QVBoxLayout(self.yield_panel)
+
+        main_layout.addWidget(left_widget, 7)
+        main_layout.addWidget(self.yield_panel, 3)
+
+    def create_edit_area(self, parent_layout):
+        edit_group = QGroupBox("📝 기록 관리")
+        edit_group.setStyleSheet("color: white; font-weight: bold;")
+        edit_layout = QGridLayout(edit_group)
+        
+        edit_layout.addWidget(QLabel("날짜:"), 0, 0)
+        self.ent_h_date = QLineEdit()
+        self.ent_h_date.setText(datetime.now().strftime("%Y-%m-%d"))
+        edit_layout.addWidget(self.ent_h_date, 0, 1)
+        
+        edit_layout.addWidget(QLabel("금융자산:"), 0, 2)
+        self.ent_h_f_asset = QLineEdit()
+        edit_layout.addWidget(self.ent_h_f_asset, 0, 3)
+        
+        edit_layout.addWidget(QLabel("총자산:"), 0, 4)
+        self.ent_h_t_asset = QLineEdit()
+        edit_layout.addWidget(self.ent_h_t_asset, 0, 5)
+        
+        edit_layout.addWidget(QLabel("순입고:"), 1, 0)
+        self.ent_h_deposit = QLineEdit()
+        edit_layout.addWidget(self.ent_h_deposit, 1, 1)
+        
+        edit_layout.addWidget(QLabel("비고:"), 1, 2)
+        self.ent_h_memo = QLineEdit()
+        edit_layout.addWidget(self.ent_h_memo, 1, 3, 1, 3)
+        
+        btn_save = QPushButton("💾 저장")
+        btn_save.clicked.connect(self.emit_save_snapshot)
+        btn_save.setStyleSheet("background-color: #1976D2; color: white; font-weight: bold;")
+        edit_layout.addWidget(btn_save, 0, 6)
+        
+        btn_delete = QPushButton("🗑️ 삭제")
+        btn_delete.clicked.connect(self.emit_delete)
+        btn_delete.setStyleSheet("background-color: #C62828; color: white; font-weight: bold;")
+        edit_layout.addWidget(btn_delete, 1, 6)
+        
+        parent_layout.addWidget(edit_group)
+
+    def on_select(self):
+        selected = self.history_sheet.selectedItems()
+        if not selected: return
+        item = selected[0]
+        self.selected_history_id = item.text(0)
+        self.ent_h_date.setText(item.text(0))
+        self.ent_h_f_asset.setText(item.text(1).replace(",", ""))
+        self.ent_h_t_asset.setText(item.text(2).replace(",", ""))
+        self.ent_h_deposit.setText(item.text(3).replace(",", "").replace("+", ""))
+        self.ent_h_memo.setText(item.text(7))
+
+    def emit_save_snapshot(self):
+        try:
+            d = self.ent_h_date.text()
+            
+            # 입력값이 비어있으면 현재 자산 값 사용, 아니면 입력값 사용
+            f_text = self.ent_h_f_asset.text().replace(",", "")
+            f = float(f_text) if f_text else self.current_f_asset
+            
+            t_text = self.ent_h_t_asset.text().replace(",", "")
+            t = float(t_text) if t_text else self.current_t_asset
+            
+            dep = float(self.ent_h_deposit.text().replace(",", "").replace("+", "") or 0)
+            memo = self.ent_h_memo.text()
+            self.save_snapshot_requested.emit(d, f, t, dep, memo)
+        except ValueError: pass
+
+    def emit_delete(self):
+        d = self.ent_h_date.text()
+        if d:
+            self.delete_requested.emit(d)
+
+    def clear_layout(self, layout):
+        while layout.count():
+            child = layout.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+
+    def draw_yield_panel(self, history_cache, current_f_asset=0):
+        self.clear_layout(self.yield_layout)
+
+        lbl_title = QLabel("[연도별 수익률]")
+        lbl_title.setStyleSheet("font-weight: bold; font-size: 14px; color: white; margin-bottom: 5px;")
+        lbl_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.yield_layout.addWidget(lbl_title)
+
+        tv_yield = QTreeWidget()
+        tv_yield.setHeaderLabels(["연도", "순입고금액", "투자수익", "수익률"])
+        tv_yield.setStyleSheet(self.history_sheet.styleSheet())
+        self.yield_layout.addWidget(tv_yield)
+        tv_yield.header().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        tv_yield.header().setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)
+        tv_yield.header().setSectionResizeMode(2, QHeaderView.ResizeMode.Interactive)
+        tv_yield.header().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
+        tv_yield.header().setDefaultAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        hardcoded_yields = {
+            "2011": 19.33, "2012": -4.83, "2013": -25.05, "2014": -33.87,
+            "2015": 41.44, "2016": 11.57, "2017": 225.87, "2018": 10.28,
+            "2019": 11.29, "2020": 33.68, "2021": 52.01, "2022": -0.36,
+            "2023": 17.10, "2024": 16.38
+        }
+
+        yearly_summary = {}
+        prev_f_asset = 0
+        
+        if history_cache:
+            for record in history_cache:
+                try:
+                    dt = datetime.strptime(record['date'], "%Y-%m-%d")
+                    # 회계 마감일 기준: 1월 15일 이전 기록은 전년도로 처리
+                    if dt.month == 1 and dt.day <= 15:
+                        year = str(dt.year - 1)
+                    else:
+                        year = str(dt.year)
+                except ValueError:
+                    year = record['date'][:4]
+
+                current_f = record['f_asset']
+                deposit = record['deposit']
+                
+                # 투자수익 = 현재자산 - 이전자산 - 순입고
+                profit = (current_f - prev_f_asset - deposit) if prev_f_asset > 0 else 0
+                # 투자수익률(월간 또는 기록간)
+                roi = (profit / prev_f_asset) if prev_f_asset > 0 else 0
+
+                if year not in yearly_summary:
+                    yearly_summary[year] = {
+                        'monthly_returns': [],
+                        'deposit_sum': 0,
+                        'profit_sum': 0,
+                        'has_actual_data': False # 실질적 성과 데이터 존재 여부
+                    }
+                
+                # 이전 자산이 있을 때만 실질적인 성과(수익)가 발생한 것으로 간주
+                if prev_f_asset > 0:
+                    yearly_summary[year]['monthly_returns'].append(roi)
+                    yearly_summary[year]['profit_sum'] += profit
+                    yearly_summary[year]['has_actual_data'] = True
+                
+                yearly_summary[year]['deposit_sum'] += deposit
+                
+                prev_f_asset = current_f
+
+        # 현재 시점의 실시간 데이터 반영 (필요한 경우)
+        if current_f_asset > 0 and prev_f_asset > 0:
+            now = datetime.now()
+            if now.month == 1 and now.day <= 15:
+                year = str(now.year - 1)
+            else:
+                year = str(now.year)
+            
+            # 현재 시세 기준 수익 계산
+            curr_profit = (current_f_asset - prev_f_asset)
+            curr_roi = curr_profit / prev_f_asset
+            
+            if year not in yearly_summary:
+                yearly_summary[year] = {
+                    'monthly_returns': [],
+                    'deposit_sum': 0,
+                    'profit_sum': 0,
+                    'has_actual_data': True
+                }
+            yearly_summary[year]['monthly_returns'].append(curr_roi)
+            yearly_summary[year]['profit_sum'] += curr_profit
+            yearly_summary[year]['has_actual_data'] = True
+
+        all_years = set(hardcoded_yields.keys()) | set(yearly_summary.keys())
+        self.yearly_yield_data = []
+
+        for year in sorted(all_years, reverse=True):
+            is_history_present = year in yearly_summary
+            is_actual_present = is_history_present and yearly_summary[year]['has_actual_data']
+            
+            if year in hardcoded_yields:
+                roi = hardcoded_yields[year]
+            elif is_actual_present:
+                returns = yearly_summary[year]['monthly_returns']
+                product_val = 1.0
+                for r in returns:
+                    product_val *= (1 + r)
+                roi = (product_val - 1) * 100
+            else:
+                # 하드코딩된 데이터도 없고, 실질적인 히스토리(수익 계산 가능 데이터)도 없으면 스킵
+                if not is_history_present: continue
+                # 상세 내역은 있으나 초기 데이터뿐인 경우 처리 (아래에서 공란으로 표시됨)
+                roi = 0
+
+            dep_sum = yearly_summary[year]['deposit_sum'] if is_actual_present else None
+            pft_sum = yearly_summary[year]['profit_sum'] if is_actual_present else None
+
+            self.yearly_yield_data.append({
+                "연도": f"{year}년", 
+                "순입고": f"{dep_sum:+,.0f}" if dep_sum is not None else "",
+                "투자수익": f"{pft_sum:+,.0f}" if pft_sum is not None else "",
+                "수익률": f"{roi:+.2f}%" if is_actual_present or year in hardcoded_yields else ""
+            })
+
+            item = QTreeWidgetItem(tv_yield)
+            item.setText(0, f"{year}년")
+            
+            if is_actual_present:
+                item.setText(1, f"{dep_sum:+,.0f}")
+                item.setText(2, f"{pft_sum:+,.0f}")
+                item.setText(3, f"{roi:+.2f}%")
+                if dep_sum < 0: item.setForeground(1, QColor("#FF6B6B"))
+                if pft_sum < 0: item.setForeground(2, QColor("#FF6B6B"))
+            elif year in hardcoded_yields:
+                item.setText(1, "")
+                item.setText(2, "")
+                item.setText(3, f"{roi:+.2f}%")
+            else:
+                item.setText(1, "")
+                item.setText(2, "")
+                item.setText(3, "")
+            
+            if (is_actual_present or year in hardcoded_yields):
+                if roi < 0:
+                    item.setForeground(3, QColor("#FF6B6B")) 
+                elif roi >= 10.0:
+                    item.setForeground(3, QColor("#4DABF7")) 
+                
+            item.setTextAlignment(0, Qt.AlignmentFlag.AlignCenter)
+            item.setTextAlignment(1, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            item.setTextAlignment(2, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            item.setTextAlignment(3, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        
+
+    def update_table(self, history_data, current_f_asset=0, current_t_asset=0):
+        self.current_f_asset = current_f_asset
+        self.current_t_asset = current_t_asset
+        self.history_sheet.clear()
+        
+        rows = []
+        prev_f, prev_t = 0, 0
+        
+        for item in history_data:
+            f, t, dep = item['f_asset'], item['t_asset'], item['deposit']
+            profit = (f - prev_f - dep) if prev_f > 0 else 0
+            roi = (profit / prev_f * 100) if prev_f > 0 else 0
+            growth = ((t - prev_t) / prev_t * 100) if prev_t > 0 else 0
+            
+            rows.append({
+                "item": item, "profit": profit, "roi": roi, "growth": growth
+            })
+            prev_f, prev_t = f, t
+
+        for row in reversed(rows):
+            item = row['item']
+            tree_item = QTreeWidgetItem(self.history_sheet)
+            
+            tree_item.setText(0, item['date'])
+            tree_item.setText(1, f"{item['f_asset']:,.0f}")
+            tree_item.setText(2, f"{item['t_asset']:,.0f}")
+            tree_item.setText(3, f"{item['deposit']:+,.0f}")
+            tree_item.setText(4, f"{row['profit']:+,.0f}")
+            tree_item.setText(5, f"{row['roi']:+.2f}%")
+            tree_item.setText(6, f"{row['growth']:+.2f}%")
+            tree_item.setText(7, item['memo'])
+            
+            if item['deposit'] < 0:
+                tree_item.setForeground(3, QColor("#FF6B6B"))
+
+            if row['profit'] < 0:
+                red_color = QColor("#FF6B6B")
+                tree_item.setForeground(4, red_color)
+                tree_item.setForeground(5, red_color)
+            
+            elif row['roi'] >= 2.0:
+                blue_color = QColor("#4DABF7")
+                tree_item.setForeground(4, blue_color)
+                tree_item.setForeground(5, blue_color)
+                
+                font = tree_item.font(5)
+                font.setBold(True)
+                tree_item.setFont(4, font)
+                tree_item.setFont(5, font)
+
+            for col in [1, 2, 3, 4, 5, 6]:
+                tree_item.setTextAlignment(col, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            tree_item.setTextAlignment(0, Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
+
+        self.ent_h_f_asset.setText(f"{current_f_asset:,.0f}")
+        self.ent_h_t_asset.setText(f"{current_t_asset:,.0f}")
+
+        self.draw_yield_panel(history_data, current_f_asset)
+
+    def save_settings(self):
+        settings = QSettings("PortfolioManager", "HistoryView")
+        settings.setValue("headerState", self.history_sheet.header().saveState())
+
+    def load_settings(self):
+        settings = QSettings("PortfolioManager", "HistoryView")
+        state = settings.value("headerState")
+        if state and hasattr(self, 'history_sheet'):
+            self.history_sheet.header().restoreState(state)

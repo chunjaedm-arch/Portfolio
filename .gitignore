@@ -1,0 +1,12 @@
+.env
+
+__pycache__/
+*.pyc
+
+# Firebase 관리자 키 무시
+*-firebase-adminsdk-*.json
+
+dist/
+build/
+.agent/
+.vscode/
