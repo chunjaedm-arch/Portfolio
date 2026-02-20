@@ -160,6 +160,9 @@ def main():
     assets_message = "💼 **Asset Details**\n"
     last_main = ""
     for item in items:
+        if item['qty'] <= 0:
+            continue
+
         if item['main'] != last_main:
             assets_message += f"\n📂 **{item['main']}**\n"
             last_main = item['main']
