@@ -156,8 +156,23 @@ def main():
             else:
                  message += f"{icon} {name}: {val:,.2f} ({chg:+.2f}%)\n"
 
+    # 자산 상세 메시지 작성
+    assets_message = "💼 **Asset Details**\n"
+    last_main = ""
+    for item in items:
+        if item['main'] != last_main:
+            assets_message += f"\n📂 **{item['main']}**\n"
+            last_main = item['main']
+        
+        diff = f" ({item['diff_str']})" if item.get('diff_str') else ""
+        
+        qty = item['qty']
+        qty_str = f"{int(qty):,}" if qty == int(qty) else f"{qty:,.4f}".rstrip('0').rstrip('.')
+        assets_message += f"• {item['name']}: {qty_str} / ₩{item['row_val']:,.0f}{diff}\n"
+
     print("5. 텔레그램 전송...")
     asyncio.run(send_telegram_message(message))
+    asyncio.run(send_telegram_message(assets_message))
     print("완료!")
 
 if __name__ == "__main__":
