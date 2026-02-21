@@ -175,7 +175,23 @@ def main():
 
     print("5. 텔레그램 전송...")
     asyncio.run(send_telegram_message(message))
-    asyncio.run(send_telegram_message(assets_message))
+    
+    # 시간 조건 체크: 평일 21시 또는 토요일 09시인 경우에만 상세 메시지 전송
+    now = datetime.now(KST)
+    weekday = now.weekday()  # 0:월, 1:화, 2:수, 3:목, 4:금, 5:토, 6:일
+    hour = now.hour
+    
+    should_send_assets = (
+        (weekday < 5 and hour == 21) or  # 평일(월-금) 오후 9시
+        (weekday == 5 and hour == 9)    # 토요일 오전 9시
+    )
+    
+    if should_send_assets:
+        asyncio.run(send_telegram_message(assets_message))
+        print("상세 자산 메시지 전송 완료.")
+    else:
+        print(f"상세 자산 메시지 전송 스킵 (현재 시간: {now.strftime('%Y-%m-%d %H:%M')}, 요일: {weekday})")
+        
     print("완료!")
 
 if __name__ == "__main__":

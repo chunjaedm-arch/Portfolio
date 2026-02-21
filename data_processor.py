@@ -49,205 +49,197 @@ class DataProcessor:
             print(f"도약계좌 계산 오류: {e}")
             return None
 
+    # --- Refactored Helper Methods ---
+    def _calculate_bond_value(self, note, qty, brl_rate, usd_rate, jpy_rate, cny_rate):
+        updated_at = datetime.now().strftime("%Y-%m-%d %H:%M") + " (KST)"
+        market_status = "Open"
+        
+        # 1. "구매단가:매수환율:현재가[:통화]" 형식 파싱
+        if ":" in note:
+            try:
+                parts = note.split(':')
+                if len(parts) >= 3:
+                    p_match = re.search(r"[-+]?\d*\.\d+|\d+", parts[0])
+                    r_match = re.search(r"[-+]?\d*\.\d+|\d+", parts[1])
+                    c_match = re.search(r"[-+]?\d*\.\d+|\d+", parts[2])
+                    
+                    if p_match and r_match and c_match:
+                        p_price = float(p_match.group())
+                        p_rate = float(r_match.group())
+                        c_price = float(c_match.group())
+
+                        currency = "KRW"
+                        if len(parts) >= 4:
+                            currency = parts[3].strip().upper()
+                        
+                        current_rate = 1.0
+                        if currency == "USD": current_rate = usd_rate
+                        elif currency == "JPY": current_rate = jpy_rate
+                        elif currency == "CNY": current_rate = cny_rate
+                        elif currency == "BRL": current_rate = brl_rate
+                        
+                        krw_val = qty * c_price * current_rate
+                        prev_unit_krw = p_price * p_rate
+                        return True, krw_val, 0.0, 0.0, prev_unit_krw, updated_at, market_status
+            except Exception:
+                pass
+
+        # 2. 기존 로직: 숫자 하나만 있는 경우 (단가로 간주)
+        match = re.search(r"[-+]?\d*\.\d+|\d+", note)
+        if match:
+            unit_price = float(match.group())
+            krw_val = qty * unit_price * brl_rate
+            return True, krw_val, 0.0, 0.0, 0.0, updated_at, market_status
+            
+        return False, 0, 0, 0, 0, updated_at, market_status
+
+    def _calculate_krx_gold(self, qty, gold_prices):
+        current_p = gold_prices.get('krx_spot', 0)
+        updated_at = datetime.now().strftime("%Y-%m-%d %H:%M") + " (KST)"
+        market_status = "Open" if 9 <= datetime.now().hour < 16 else "Closed"
+        return True, current_p * qty, 0.0, 0.0, 0.0, updated_at, market_status
+
+    def _calculate_crypto(self, ticker_upper, qty, api_manager):
+        symbol = ticker_upper.replace("KRW=", "").replace("=UPBIT", "")
+        current_p, prev_p = api_manager.get_upbit_price(symbol)
+        updated_at = datetime.now().strftime("%Y-%m-%d %H:%M") + " (KST)"
+        if current_p is not None:
+            market_status = "Open"
+            return True, current_p * qty, 0.0, 0.0, prev_p, updated_at, market_status
+        return False, 0, 0, 0, 0, updated_at, "n/a"
+
+    def _calculate_stock(self, ticker, ticker_upper, qty):
+        current_p = None
+        prev_p = 0.0
+        updated_at = "-"
+        market_status = "n/a"
+        
+        # 1. [우선순위] yfinance로 가격 및 시장 상태 조회
+        try:
+            stock = yf.Ticker(ticker)
+            hist = stock.history(period="5d", interval="5m", prepost=True)
+            
+            if not hist.empty:
+                current_p = float(hist['Close'].iloc[-1])
+                last_dt = hist.index[-1]
+                updated_at = last_dt.strftime("%Y-%m-%d %H:%M") + f" ({last_dt.tzname() or ''})"
+
+            if hasattr(stock, 'history_metadata') and isinstance(stock.history_metadata, dict):
+                m_state = stock.history_metadata.get('marketState')
+                if m_state:
+                    m_state = m_state.upper()
+                    if 'REGULAR' in m_state: market_status = 'Open'
+                    elif 'CLOSED' in m_state: market_status = 'Closed'
+                    elif 'PRE' in m_state: market_status = 'Pre-Market'
+                    elif 'POST' in m_state: market_status = 'Post-Market'
+                    else: market_status = m_state.capitalize()
+
+            if market_status == "n/a":
+                try:
+                    m_state = stock.fast_info.market_state
+                    if m_state:
+                        m_state = m_state.upper()
+                        if m_state in ['REGULAR', 'REGULARMARKET']: market_status = 'Open'
+                        elif m_state in ['CLOSED', 'CLOSEDMARKET']: market_status = 'Closed'
+                        elif 'PRE' in m_state: market_status = 'Pre-Market'
+                        elif 'POST' in m_state: market_status = 'Post-Market'
+                        else: market_status = m_state.capitalize()
+                except: pass
+
+            if market_status == "n/a" and 'last_dt' in locals():
+                t_min = last_dt.hour * 60 + last_dt.minute
+                if 240 <= t_min < 570:   market_status = "Pre-Market"
+                elif 570 <= t_min < 960: market_status = "Open"
+                elif 960 <= t_min < 1200: market_status = "Post-Market"
+                else: market_status = "Closed"
+
+            try: prev_p = stock.fast_info.previous_close
+            except: prev_p = stock.info.get('previousClose', 0.0)
+
+            if prev_p is None or prev_p == 0.0:
+                hist_daily = stock.history(period="2d")
+                if len(hist_daily) > 1:
+                    prev_p = float(hist_daily['Close'].iloc[-2])
+                elif not hist_daily.empty:
+                    prev_p = float(hist_daily['Close'].iloc[-1])
+        except Exception:
+            current_p = None
+
+        # 2. [Fallback] YahooQuery
+        if current_p is None:
+            try:
+                yq_ticker = YQTicker(ticker)
+                price_data = yq_ticker.price.get(ticker)
+                
+                if isinstance(price_data, dict):
+                    if market_status == "n/a":
+                        market_status = price_data.get('marketState', '').capitalize()
+                    
+                    market_state_upper = price_data.get('marketState', '').upper()
+                    reg_price = price_data.get('regularMarketPrice')
+                    pre_price = price_data.get('preMarketPrice')
+                    post_price = price_data.get('postMarketPrice')
+                    
+                    yq_prev_p = price_data.get('regularMarketPreviousClose')
+                    if yq_prev_p: prev_p = yq_prev_p
+
+                    if 'PRE' in market_state_upper and pre_price: current_p = pre_price
+                    elif 'POST' in market_state_upper and post_price: current_p = post_price
+                    elif 'REGULAR' in market_state_upper and reg_price: current_p = reg_price
+                    elif 'CLOSED' in market_state_upper and post_price: current_p = post_price
+                    elif 'CLOSED' in market_state_upper and reg_price: current_p = reg_price
+
+                    if current_p is not None:
+                        print(f"[{ticker}] yfinance 실패 -> YahooQuery Fallback 사용: {current_p}")
+                        if updated_at == "-" or updated_at == "n/a":
+                            reg_time = price_data.get('regularMarketTime')
+                            if reg_time:
+                                dt = datetime.fromtimestamp(reg_time)
+                                tz_short = price_data.get('exchangeTimezoneShortName', '')
+                                updated_at = dt.strftime("%Y-%m-%d %H:%M") + f" ({tz_short})"
+            except Exception:
+                pass
+
+        if current_p is None:
+            print(f"[{ticker}] 시세 조회 실패 (데이터 없음)")
+            return False, 0, 0, 0, 0, updated_at, market_status
+
+        if ticker_upper.endswith((".KS", ".KQ")):
+            return True, current_p * qty, 0.0, 0.0, prev_p, updated_at, market_status
+        elif ticker_upper.endswith(".T"):
+            return True, 0.0, 0.0, current_p * qty, prev_p, updated_at, market_status
+        else:
+            return True, 0.0, current_p * qty, 0.0, prev_p, updated_at, market_status
+
+    # --- Main Router Method ---
     def calculate_asset_values(self, ticker, qty, note, gold_prices, api_manager, sub_category=None, usd_rate=0.0, jpy_rate=0.0, cny_rate=0.0, brl_rate=0.0):
         updated_at = "-"
         market_status = "n/a"
         
-        # 티커가 '도약'인 경우에만 도약계좌 로직 수행
         if ticker == "도약":
             calculated_youth = self.calculate_youth_account(note)
             if calculated_youth is not None:
                 updated_at = datetime.now().strftime("%Y-%m-%d %H:%M") + " (KST)"
-                market_status = "n/a"
-                return True, float(calculated_youth), 0.0, 0.0, 0.0, updated_at, market_status
+                return True, float(calculated_youth), 0.0, 0.0, 0.0, updated_at, "n/a"
 
         if not ticker:
-            market_status = "n/a"
             return False, 0, 0, 0, 0, updated_at, market_status
 
         try:
-            # 채권(브라질 국채, 국고채 등) 처리 로직
             if sub_category == "채권":
-                updated_at = datetime.now().strftime("%Y-%m-%d %H:%M") + " (KST)"
-                market_status = "Open"
-                # 1. "구매단가:매수환율:현재가[:통화]" 형식 파싱
-                if ":" in note:
-                    try:
-                        parts = note.split(':')
-                        
-                        # 3단 이상 구조: 매수가:매수환율:현재가[:통화]
-                        if len(parts) >= 3:
-                            p_match = re.search(r"[-+]?\d*\.\d+|\d+", parts[0])
-                            r_match = re.search(r"[-+]?\d*\.\d+|\d+", parts[1])
-                            c_match = re.search(r"[-+]?\d*\.\d+|\d+", parts[2])
-                            
-                            if p_match and r_match and c_match:
-                                p_price = float(p_match.group())
-                                p_rate = float(r_match.group())
-                                c_price = float(c_match.group())
-
-                                # 통화 확인 (4번째 파트가 있으면 사용, 없으면 KRW)
-                                currency = "KRW"
-                                if len(parts) >= 4:
-                                    currency = parts[3].strip().upper()
-                                
-                                # 현재 환율 결정
-                                current_rate = 1.0
-                                if currency == "USD": current_rate = usd_rate
-                                elif currency == "JPY": current_rate = jpy_rate
-                                elif currency == "CNY": current_rate = cny_rate
-                                elif currency == "BRL": current_rate = brl_rate
-                                
-                                # 평가액 = 수량 * 현재가 * 적용환율
-                                krw_val = qty * c_price * current_rate
-                                
-                                # 매수단가 환산액 = 매수가 * 매수환율 (환차손익 포함)
-                                prev_unit_krw = p_price * p_rate
-                                return True, krw_val, 0.0, 0.0, prev_unit_krw, updated_at, market_status
-                    except Exception:
-                        pass
-
-                # 2. 기존 로직: 숫자 하나만 있는 경우 (단가로 간주)
-                match = re.search(r"[-+]?\d*\.\d+|\d+", note)
-                if match:
-                    unit_price = float(match.group())
-                    # 평가액 = 수량 * 단가 * BRL환율
-                    krw_val = qty * unit_price * brl_rate
-                    return True, krw_val, 0.0, 0.0, 0.0, updated_at, market_status
+                return self._calculate_bond_value(note, qty, brl_rate, usd_rate, jpy_rate, cny_rate)
 
             ticker_upper = ticker.upper()
             
             if ticker_upper == "KRX_GOLD":
-                current_p = gold_prices.get('krx_spot', 0)
-                updated_at = datetime.now().strftime("%Y-%m-%d %H:%M") + " (KST)"
-                market_status = "Open" if 9 <= datetime.now().hour < 16 else "Closed"
-                return True, current_p * qty, 0.0, 0.0, 0.0, updated_at, market_status
+                return self._calculate_krx_gold(qty, gold_prices)
             
             elif "UPBIT" in ticker_upper:
-                symbol = ticker_upper.replace("KRW=", "").replace("=UPBIT", "")
-                current_p, prev_p = api_manager.get_upbit_price(symbol)
-                if current_p is not None:
-                    updated_at = datetime.now().strftime("%Y-%m-%d %H:%M") + " (KST)"
-                    market_status = "Open"
-                    return True, current_p * qty, 0.0, 0.0, prev_p, updated_at, market_status
-                return False, 0, 0, 0, 0, updated_at, market_status
+                return self._calculate_crypto(ticker_upper, qty, api_manager)
 
             else:
-                current_p = None
-                prev_p = 0.0
-                
-                # ---------------------------------------------------------
-                # 1. [우선순위] yfinance로 가격 및 시장 상태 조회 (속도 개선)
-                # ---------------------------------------------------------
-                try:
-                    stock = yf.Ticker(ticker)
-                    # prepost=True로 장전/장후 데이터를 포함한 최근 5일간의 5분봉 데이터 조회
-                    hist = stock.history(period="5d", interval="5m", prepost=True)
-                    
-                    if not hist.empty:
-                        current_p = float(hist['Close'].iloc[-1])
-                        last_dt = hist.index[-1]
-                        updated_at = last_dt.strftime("%Y-%m-%d %H:%M") + f" ({last_dt.tzname() or ''})"
+                return self._calculate_stock(ticker, ticker_upper, qty)
 
-                    # (1) history_metadata 확인 (사용자 요청 반영)
-                    if hasattr(stock, 'history_metadata') and isinstance(stock.history_metadata, dict):
-                        m_state = stock.history_metadata.get('marketState')
-                        if m_state:
-                            m_state = m_state.upper()
-                            if 'REGULAR' in m_state: market_status = 'Open'
-                            elif 'CLOSED' in m_state: market_status = 'Closed'
-                            elif 'PRE' in m_state: market_status = 'Pre-Market'
-                            elif 'POST' in m_state: market_status = 'Post-Market'
-                            else: market_status = m_state.capitalize()
-
-                    # (2) fast_info 확인 (metadata에 없으면)
-                    if market_status == "n/a":
-                        try:
-                            m_state = stock.fast_info.market_state
-                            if m_state:
-                                m_state = m_state.upper()
-                                if m_state in ['REGULAR', 'REGULARMARKET']: market_status = 'Open'
-                                elif m_state in ['CLOSED', 'CLOSEDMARKET']: market_status = 'Closed'
-                                elif 'PRE' in m_state: market_status = 'Pre-Market'
-                                elif 'POST' in m_state: market_status = 'Post-Market'
-                                else: market_status = m_state.capitalize()
-                        except: pass
-
-                    # (3) 시간 기반 추정 (여전히 n/a라면)
-                    if market_status == "n/a" and 'last_dt' in locals():
-                        t_min = last_dt.hour * 60 + last_dt.minute
-                        if 240 <= t_min < 570:   market_status = "Pre-Market" # 04:00 ~ 09:30
-                        elif 570 <= t_min < 960: market_status = "Open"       # 09:30 ~ 16:00
-                        elif 960 <= t_min < 1200: market_status = "Post-Market" # 16:00 ~ 20:00
-                        else: market_status = "Closed"
-
-                    # 전일 종가 조회 (fast_info 우선 -> info -> history)
-                    try: prev_p = stock.fast_info.previous_close
-                    except: prev_p = stock.info.get('previousClose', 0.0)
-
-                    if prev_p is None or prev_p == 0.0:
-                        hist_daily = stock.history(period="2d")
-                        if len(hist_daily) > 1:
-                            prev_p = float(hist_daily['Close'].iloc[-2])
-                        elif not hist_daily.empty:
-                            prev_p = float(hist_daily['Close'].iloc[-1])
-                except Exception:
-                    current_p = None
-
-                # ---------------------------------------------------------
-                # 2. [Fallback] YahooQuery (yfinance 실패 시에만 수행)
-                # ---------------------------------------------------------
-                if current_p is None:
-                    try:
-                        # 위에서 생성한 yq_ticker 재사용 혹은 새로 생성
-                        if 'yq_ticker' not in locals():
-                            yq_ticker = YQTicker(ticker)
-                        
-                        # price_data가 없으면 다시 조회
-                        if 'price_data' not in locals() or not isinstance(price_data, dict):
-                            price_data = yq_ticker.price.get(ticker)
-                        
-                        if isinstance(price_data, dict):
-                            # 만약 위에서 status를 못 가져왔다면 여기서 다시 시도
-                            if market_status == "n/a":
-                                market_status = price_data.get('marketState', '').capitalize()
-                            
-                            market_state_upper = price_data.get('marketState', '').upper()
-                            reg_price = price_data.get('regularMarketPrice')
-                            pre_price = price_data.get('preMarketPrice')
-                            post_price = price_data.get('postMarketPrice')
-                            
-                            # yfinance가 prev_p를 못가져왔을 경우를 대비해 덮어쓰기
-                            yq_prev_p = price_data.get('regularMarketPreviousClose')
-                            if yq_prev_p: prev_p = yq_prev_p
-
-                            if 'PRE' in market_state_upper and pre_price: current_p = pre_price
-                            elif 'POST' in market_state_upper and post_price: current_p = post_price
-                            elif 'REGULAR' in market_state_upper and reg_price: current_p = reg_price
-                            elif 'CLOSED' in market_state_upper and post_price: current_p = post_price
-                            elif 'CLOSED' in market_state_upper and reg_price: current_p = reg_price
-
-                            if current_p is not None:
-                                print(f"[{ticker}] yfinance 실패 -> YahooQuery Fallback 사용: {current_p}")
-                                if updated_at == "-" or updated_at == "n/a":
-                                    reg_time = price_data.get('regularMarketTime')
-                                    if reg_time:
-                                        dt = datetime.fromtimestamp(reg_time)
-                                        tz_short = price_data.get('exchangeTimezoneShortName', '')
-                                        updated_at = dt.strftime("%Y-%m-%d %H:%M") + f" ({tz_short})"
-                    except Exception:
-                        pass
-
-                if current_p is None:
-                    print(f"[{ticker}] 시세 조회 실패 (데이터 없음)")
-                    return False, 0, 0, 0, 0, updated_at, market_status
-
-                if ticker_upper.endswith((".KS", ".KQ")):
-                    return True, current_p * qty, 0.0, 0.0, prev_p, updated_at, market_status
-                elif ticker_upper.endswith(".T"):
-                    return True, 0.0, 0.0, current_p * qty, prev_p, updated_at, market_status
-                else:
-                    return True, 0.0, current_p * qty, 0.0, prev_p, updated_at, market_status
         except Exception as e:
             print(f"[{ticker}] 자산 계산 오류: {e}")
             return False, 0, 0, 0, 0, updated_at, market_status
