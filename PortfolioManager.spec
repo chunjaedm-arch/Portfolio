@@ -2,11 +2,11 @@
 
 
 a = Analysis(
-    ['G:\\내 드라이브\\Code\\portfolio1.6\\Portfolio.py'],
+    ['Portfolio.py'],
     pathex=[],
     binaries=[],
     datas=[],
-    hiddenimports=['PyQt6.QtWebEngineWidgets', 'pandas', 'plotly', 'yfinance', 'yahooquery', 'FinanceDataReader'],
+    hiddenimports=[],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
