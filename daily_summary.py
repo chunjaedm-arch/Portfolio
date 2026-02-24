@@ -103,13 +103,9 @@ def main():
     
     message = f"📊 **Daily Asset Summary**\n`{now_str}`\n\n"
     
-    growth_str = f" ({growth:+.2f}%)" if growth is not None else ""
-    message += f"💰 **총 자산**: ₩{all_total:,.0f}{growth_str}\n"
-    
     roi_str = f" ({roi:+.2f}%)" if roi is not None else ""
     message += f"🏦 **금융 자산**: ₩{f_total:,.0f}{roi_str}\n"
     
-    message += f"📈 **투자 자산**: ₩{invest_total:,.0f}\n"
     peak_date_str = display_peak_date[2:] if len(display_peak_date) == 8 else display_peak_date
     message += f"🏆 **MAX-{peak_date_str}**: ₩{display_peak:,.0f}\n"
     message += f"📉 **DD**: ₩{mdd_val:,.0f} ({mdd_pct:.2f}%)\n"
