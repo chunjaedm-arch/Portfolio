@@ -82,8 +82,16 @@ class AnalysisWorker(QThread):
             # KOSPI (Benchmark 2) - FinanceDataReader
             try:
                 df_kospi = fdr.DataReader('KS11', start_date, end_date)
-            except Exception:
+            except Exception as e:
+                print(f"KOSPI(FDR) Load Error: {e}")
                 df_kospi = pd.DataFrame()
+            
+            # [Fallback] FDR 데이터가 없으면 yfinance로 재시도 (^KS11)
+            if df_kospi.empty:
+                try:
+                    df_kospi = yf.Ticker("^KS11").history(start=start_date, end=end_date)
+                except Exception as e:
+                    print(f"KOSPI(YF) Load Error: {e}")
             
             # ^IRX (Risk-Free Rate, 13 Week Treasury Bill)
             irx = yf.Ticker("^IRX")

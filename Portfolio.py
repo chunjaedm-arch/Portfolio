@@ -305,14 +305,18 @@ class PortfolioApp(QMainWindow):
     def show_calculator(self):
         gold_info = getattr(self, 'current_gold_info', {})
         
-        # 포트폴리오에서 IAU 현재가 찾기 (보유 중인 경우)
+        # 포트폴리오에서 IAU, PAXG 현재가 찾기 (보유 중인 경우)
         iau_price = 0.0
+        paxg_price = 0.0
         for item in self.current_items:
             if item['ticker'] == 'IAU' and item['qty'] > 0:
                 iau_price = item['usd'] / item['qty']
-                break
-                
-        dlg = CalculatorDialog(self, self.usd_rate, gold_info, iau_price)
+            elif item['ticker'] == 'PAXG' and item['qty'] > 0:
+                # 빗썸 등 원화 마켓 가정 (보유 자산의 KRW 평가액 / 수량)
+                if item['krw'] > 0:
+                    paxg_price = item['krw'] / item['qty']
+
+        dlg = CalculatorDialog(self, self.usd_rate, gold_info, iau_price, paxg_price)
         dlg.exec()
 
     def show_settings_dialog(self):
