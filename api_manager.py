@@ -65,14 +65,24 @@ class APIManager:
         for name, ticker in indices.items():
             try:
                 t = yf.Ticker(ticker)
-                hist = t.history(period="5d")
-                if len(hist) >= 2:
-                    curr = float(hist['Close'].iloc[-1])
-                    prev = float(hist['Close'].iloc[-2])
+                
+                # fast_info를 사용하여 명시적으로 전일 종가(previous_close)와 현재가(last_price) 사용
+                info = t.fast_info
+                curr = info.last_price
+                prev = info.previous_close
+                
+                if curr is not None and prev is not None and prev != 0:
                     chg = ((curr - prev) / prev) * 100
                     results[name] = (curr, chg)
-                elif len(hist) == 1:
-                    results[name] = (float(hist['Close'].iloc[-1]), 0.0)
+                else:
+                    hist = t.history(period="5d")
+                    if len(hist) >= 2:
+                        curr = float(hist['Close'].iloc[-1])
+                        prev = float(hist['Close'].iloc[-2])
+                        chg = ((curr - prev) / prev) * 100
+                        results[name] = (curr, chg)
+                    elif len(hist) == 1:
+                        results[name] = (float(hist['Close'].iloc[-1]), 0.0)
             except Exception as e:
                 print(f"Index {name} fetch failed: {e}")
         return results
