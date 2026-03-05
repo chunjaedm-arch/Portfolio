@@ -74,6 +74,7 @@ class AnalysisWorker(QThread):
             else:
                 start_date = datetime.now() # Fallback
             end_date = datetime.now()
+            current_month_start = pd.Timestamp(end_date.year, end_date.month, 1)
             
             # SPY (Benchmark)
             spy = yf.Ticker("SPY")
@@ -131,6 +132,9 @@ class AnalysisWorker(QThread):
                 df_spy_monthly = df_spy['Close'].resample('ME').last()
                 df_spy_monthly = df_spy_monthly.to_frame()
                 
+                # 현재 진행 중인 달 제외 (완전히 끝난 월만 포함)
+                df_spy_monthly = df_spy_monthly[df_spy_monthly.index < current_month_start]
+                
                 df_spy_monthly['return'] = df_spy_monthly['Close'].pct_change().fillna(0)
                 df_spy_monthly['cum_return'] = (1 + df_spy_monthly['return']).cumprod()
                 
@@ -146,6 +150,9 @@ class AnalysisWorker(QThread):
             if not df_kospi.empty:
                 # KOSPI 월간 데이터 변환
                 df_kospi_monthly = df_kospi['Close'].resample('ME').last().to_frame()
+                
+                # 현재 진행 중인 달 제외 (완전히 끝난 월만 포함)
+                df_kospi_monthly = df_kospi_monthly[df_kospi_monthly.index < current_month_start]
                 
                 df_kospi_monthly['return'] = df_kospi_monthly['Close'].pct_change().fillna(0)
                 df_kospi_monthly['cum_return'] = (1 + df_kospi_monthly['return']).cumprod()
