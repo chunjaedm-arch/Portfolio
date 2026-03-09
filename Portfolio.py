@@ -300,7 +300,7 @@ class PortfolioApp(QMainWindow):
             self.fetch_history()
         
         # Render analysis with current history data
-        self.analysis_view.render_analysis(self.history_cache)
+        self.analysis_view.render_analysis(self.history_cache, self.current_f_total)
 
     def show_calculator(self):
         gold_info = getattr(self, 'current_gold_info', {})
@@ -675,7 +675,7 @@ class PortfolioApp(QMainWindow):
             self.chart_view.render_charts(self.history_cache, self.current_items)
             
             # [추가] 분석 데이터도 백그라운드에서 미리 계산 (내보내기 시 포함되도록)
-            self.analysis_view.render_analysis(self.history_cache)
+            self.analysis_view.render_analysis(self.history_cache, self.current_f_total)
             
         except Exception as e:
             self.on_data_error(str(e))
