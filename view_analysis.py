@@ -16,18 +16,34 @@ from PyQt6.QtCore import Qt, QThread, pyqtSignal
 class AnalysisWorker(QThread):
     finished = pyqtSignal(object, object, object, dict)
 
-    def __init__(self, history_data):
+    def __init__(self, history_data, current_f_asset=0.0):
         super().__init__()
         self.history_data = history_data
+        self.current_f_asset = current_f_asset
 
     def run(self):
-        if not self.history_data:
+        if not self.history_data and self.current_f_asset <= 0:
             self.finished.emit(pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), {})
             return
 
         try:
             # 1. User Data Processing (Monthly)
             df_raw = pd.DataFrame(self.history_data)
+            
+            # [New] 현재 자산 상태 추가 (Live Data) -> 이번 달 데이터로 반영
+            if self.current_f_asset > 0:
+                new_row = {
+                    'date': datetime.now().strftime('%Y-%m-%d'),
+                    'f_asset': self.current_f_asset,
+                    'deposit': 0, # 현재 시점의 추가 입금은 0으로 가정 (순수 평가액 변동 반영)
+                    't_asset': 0,
+                    'memo': 'Live'
+                }
+                if df_raw.empty:
+                    df_raw = pd.DataFrame([new_row])
+                else:
+                    df_raw = pd.concat([df_raw, pd.DataFrame([new_row])], ignore_index=True)
+            
             df_raw['date'] = pd.to_datetime(df_raw['date'])
             df_raw.set_index('date', inplace=True)
             df_raw.sort_index(inplace=True)
@@ -74,7 +90,6 @@ class AnalysisWorker(QThread):
             else:
                 start_date = datetime.now() # Fallback
             end_date = datetime.now()
-            current_month_start = pd.Timestamp(end_date.year, end_date.month, 1)
             
             # SPY (Benchmark)
             spy = yf.Ticker("SPY")
@@ -132,9 +147,6 @@ class AnalysisWorker(QThread):
                 df_spy_monthly = df_spy['Close'].resample('ME').last()
                 df_spy_monthly = df_spy_monthly.to_frame()
                 
-                # 현재 진행 중인 달 제외 (완전히 끝난 월만 포함)
-                df_spy_monthly = df_spy_monthly[df_spy_monthly.index < current_month_start]
-                
                 df_spy_monthly['return'] = df_spy_monthly['Close'].pct_change().fillna(0)
                 df_spy_monthly['cum_return'] = (1 + df_spy_monthly['return']).cumprod()
                 
@@ -150,9 +162,6 @@ class AnalysisWorker(QThread):
             if not df_kospi.empty:
                 # KOSPI 월간 데이터 변환
                 df_kospi_monthly = df_kospi['Close'].resample('ME').last().to_frame()
-                
-                # 현재 진행 중인 달 제외 (완전히 끝난 월만 포함)
-                df_kospi_monthly = df_kospi_monthly[df_kospi_monthly.index < current_month_start]
                 
                 df_kospi_monthly['return'] = df_kospi_monthly['Close'].pct_change().fillna(0)
                 df_kospi_monthly['cum_return'] = (1 + df_kospi_monthly['return']).cumprod()
@@ -173,7 +182,6 @@ class AnalysisWorker(QThread):
                 '5Y': 60
             }
             matrix = {}
-            now_date = datetime.now()
 
             # 지표 계산 헬퍼 함수
             def calc_metrics(df, freq=12):
@@ -467,10 +475,10 @@ class AnalysisView(QWidget):
             
         card.lbl_value.setStyleSheet(f"color: {color}; font-size: 18px; font-weight: bold;")
 
-    def render_analysis(self, history_data):
+    def render_analysis(self, history_data, current_f_asset=0.0):
         self.chart_view.setHtml('<body style="background-color: #2b2b2b; color: #e0e0e0; display: flex; justify-content: center; align-items: center; height: 100%;"><h3>데이터 분석 중...</h3></body>')
         
-        self.worker = AnalysisWorker(history_data)
+        self.worker = AnalysisWorker(history_data, current_f_asset)
         self.worker.finished.connect(self.on_analysis_finished)
         self.worker.start()
 
@@ -606,7 +614,7 @@ class AnalysisView(QWidget):
             ("Sortino Ratio (내 포트)", 'sortino', 'user', False),
             ("Sortino Ratio (SPY)", 'sortino', 'spy', False),
             ("Sortino Ratio (KOSPI)", 'sortino', 'kospi', False),
-            ("Risk-Free Rate (내 포트)", 'rf_avg', 'user', True),
+            ("Risk-Free Rate (^IRX)", 'rf_avg', 'user', True),
         ]
 
         self.matrix_table.setRowCount(len(rows_def))
