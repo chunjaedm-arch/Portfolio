@@ -15,3 +15,22 @@ build/
 web/.next/
 web/node_modules/
 web/.env*.local
+
+# 앱에서 내보내는 데이터 파일 (개인 자산 정보 포함)
+*.csv
+*.zip
+*.xlsx
+
+# 개인 투자 규칙 파일
+rule.md
+Rule.md
+
+# PyInstaller 빌드 잔재
+*.spec
+
+# OS 파일
+.DS_Store
+Thumbs.db
+
+# IDE
+*.idea/
