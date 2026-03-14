@@ -16,6 +16,7 @@ class HistoryView(QWidget):
         self.yearly_yield_data = []
         self.current_f_asset = 0
         self.current_t_asset = 0
+        self._is_editing = False
         self.init_ui()
 
     def init_ui(self):
@@ -93,16 +94,22 @@ class HistoryView(QWidget):
         self.ent_h_memo = QLineEdit()
         edit_layout.addWidget(self.ent_h_memo, 1, 3, 1, 3)
         
-        btn_save = QPushButton("💾 저장")
-        btn_save.clicked.connect(self.emit_save_snapshot)
-        btn_save.setStyleSheet("background-color: #1976D2; color: white; font-weight: bold;")
-        edit_layout.addWidget(btn_save, 0, 6)
-        
+        self.btn_new = QPushButton("➕ 신규등록")
+        self.btn_new.clicked.connect(self.emit_new_snapshot)
+        self.btn_new.setStyleSheet("background-color: #1565C0; color: white; font-weight: bold;")
+        edit_layout.addWidget(self.btn_new, 0, 6)
+
+        self.btn_update = QPushButton("✏️ 수정")
+        self.btn_update.clicked.connect(self.emit_save_snapshot)
+        self.btn_update.setStyleSheet("background-color: #1976D2; color: white; font-weight: bold;")
+        self.btn_update.setEnabled(False)
+        edit_layout.addWidget(self.btn_update, 1, 6)
+
         btn_delete = QPushButton("🗑️ 삭제")
         btn_delete.clicked.connect(self.emit_delete)
         btn_delete.setStyleSheet("background-color: #C62828; color: white; font-weight: bold;")
-        edit_layout.addWidget(btn_delete, 1, 6)
-        
+        edit_layout.addWidget(btn_delete, 2, 6)
+
         parent_layout.addWidget(edit_group)
 
     def on_select(self):
@@ -115,8 +122,33 @@ class HistoryView(QWidget):
         self.ent_h_t_asset.setText(item.text(2).replace(",", ""))
         self.ent_h_deposit.setText(item.text(3).replace(",", "").replace("+", ""))
         self.ent_h_memo.setText(item.text(7))
+        self._is_editing = True
+        self.btn_update.setEnabled(True)
+
+    def emit_new_snapshot(self):
+        """신규등록: 폼 데이터를 새 기록으로 저장하고 폼 초기화"""
+        try:
+            d = self.ent_h_date.text()
+            f_text = self.ent_h_f_asset.text().replace(",", "")
+            f = float(f_text) if f_text else self.current_f_asset
+            t_text = self.ent_h_t_asset.text().replace(",", "")
+            t = float(t_text) if t_text else self.current_t_asset
+            dep = float(self.ent_h_deposit.text().replace(",", "").replace("+", "") or 0)
+            memo = self.ent_h_memo.text()
+            self.save_snapshot_requested.emit(d, f, t, dep, memo)
+            # 저장 후 폼 초기화 (오늘 날짜 + 현재 자산값)
+            self.ent_h_date.setText(datetime.now().strftime("%Y-%m-%d"))
+            self.ent_h_f_asset.setText(f"{self.current_f_asset:,.0f}")
+            self.ent_h_t_asset.setText(f"{self.current_t_asset:,.0f}")
+            self.ent_h_deposit.clear()
+            self.ent_h_memo.clear()
+            self._is_editing = False
+            self.btn_update.setEnabled(False)
+            self.history_sheet.clearSelection()
+        except ValueError: pass
 
     def emit_save_snapshot(self):
+        """수정: 선택된 기존 기록을 업데이트"""
         try:
             d = self.ent_h_date.text()
             

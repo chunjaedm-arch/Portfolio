@@ -47,7 +47,8 @@ class AssetView(QWidget):
             
         self.sheet.itemDoubleClicked.connect(self.on_item_double_click)
         layout.addWidget(self.sheet)
-        
+
+        self._is_editing = False
         self.create_edit_area(layout)
 
     def create_edit_area(self, parent_layout):
@@ -75,16 +76,23 @@ class AssetView(QWidget):
                 grid.addWidget(le, r, c+1)
                 
         btn_layout = QHBoxLayout()
-        btn_save = QPushButton("💾 저장/업데이트")
-        btn_save.setStyleSheet("background-color: #2E7D32; color: white; font-weight: bold;")
-        btn_save.clicked.connect(self.emit_save)
-        
+
+        self.btn_new = QPushButton("➕ 신규등록")
+        self.btn_new.setStyleSheet("background-color: #1565C0; color: white; font-weight: bold;")
+        self.btn_new.clicked.connect(self.emit_new)
+
+        self.btn_update = QPushButton("✏️ 수정")
+        self.btn_update.setStyleSheet("background-color: #2E7D32; color: white; font-weight: bold;")
+        self.btn_update.clicked.connect(self.emit_save)
+        self.btn_update.setEnabled(False)
+
         btn_delete = QPushButton("🗑️ 삭제")
         btn_delete.setStyleSheet("background-color: #C62828; color: white; font-weight: bold;")
         btn_delete.clicked.connect(self.emit_delete)
-        
+
         btn_layout.addStretch()
-        btn_layout.addWidget(btn_save)
+        btn_layout.addWidget(self.btn_new)
+        btn_layout.addWidget(self.btn_update)
         btn_layout.addWidget(btn_delete)
         btn_layout.addStretch()
         
@@ -93,15 +101,29 @@ class AssetView(QWidget):
 
     def on_item_double_click(self, item, column):
         mapping = {
-            "대분류": 0, "소분류": 1, "품명": 2, "금액(달러)": 5, "금액(엔)": 6, 
+            "대분류": 0, "소분류": 1, "품명": 2, "금액(달러)": 5, "금액(엔)": 6,
             "금액(원)": 7, "수량": 8, "티커": 9, "목표비중": 10, "비고": 13
         }
         for key, col_idx in mapping.items():
             val = item.text(col_idx).replace(",", "").replace("%", "")
             if key in self.asset_inputs:
                 self.asset_inputs[key].setText(val)
+        self._is_editing = True
+        self.btn_update.setEnabled(True)
+
+    def emit_new(self):
+        """신규등록: 폼에 입력된 데이터를 새 항목으로 저장하고 폼 초기화"""
+        name = self.asset_inputs["품명"].text()
+        if not name: return
+        data = {k: v.text() for k, v in self.asset_inputs.items()}
+        self.save_requested.emit(name, data)
+        for le in self.asset_inputs.values():
+            le.clear()
+        self._is_editing = False
+        self.btn_update.setEnabled(False)
 
     def emit_save(self):
+        """수정: 선택된 기존 항목을 업데이트"""
         name = self.asset_inputs["품명"].text()
         if not name: return
         data = {k: v.text() for k, v in self.asset_inputs.items()}
