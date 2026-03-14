@@ -345,21 +345,28 @@ class DataProcessor:
         """수익률(ROI) 및 자산 증감률(Growth) 계산"""
         roi = None
         growth = None
-        
+
         if history_cache:
             last_record = history_cache[-1]
             prev_f_asset = last_record['f_asset']
             prev_t_asset = last_record['t_asset']
-            
+
             if prev_t_asset > 0:
-                growth = (all_total - prev_t_asset) / prev_t_asset * 100
-            
+                # 현재 부동산 금액이 과거 기록의 부동산 금액보다 현저히 크면
+                # (과거 기록에 부동산이 반영되지 않은 경우) 금융자산 기준으로 비교
+                real_estate_now = all_total - f_total
+                real_estate_prev = max(0, prev_t_asset - prev_f_asset)
+                if real_estate_now > 0 and real_estate_now > real_estate_prev * 2:
+                    growth = (f_total - prev_f_asset) / prev_f_asset * 100 if prev_f_asset > 0 else None
+                else:
+                    growth = (all_total - prev_t_asset) / prev_t_asset * 100
+
             # 순입고(deposit)는 월중 변동이 있을 수 있으나, 현재 로직상 전월 확정분 기준 계산
             pending_deposit = 0
             if prev_f_asset > 0:
                 profit = f_total - prev_f_asset - pending_deposit
                 roi = (profit / prev_f_asset) * 100
-        
+
         return roi, growth
 
     def get_deposit_sum_since(self, history_cache, base_date_str):
