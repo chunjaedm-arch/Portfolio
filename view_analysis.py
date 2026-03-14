@@ -143,30 +143,35 @@ class AnalysisWorker(QThread):
 
             # (2) SPY Data에 Rf 매핑
             if not df_spy.empty:
-                # SPY도 월간 데이터로 변환 (Month End)
-                df_spy_monthly = df_spy['Close'].resample('ME').last()
-                df_spy_monthly = df_spy_monthly.to_frame()
-                
+                # SPY 월간 데이터로 변환 (매월 15일 기준: 15일 이하 마지막 거래일)
+                spy_close = df_spy['Close']
+                spy_15 = spy_close[spy_close.index.day <= 15]
+                df_spy_monthly = spy_15.groupby(spy_15.index.to_period('M')).last().to_frame()
+                df_spy_monthly.index = df_spy_monthly.index.to_timestamp() + pd.offsets.Day(14)
+
                 df_spy_monthly['return'] = df_spy_monthly['Close'].pct_change().fillna(0)
                 df_spy_monthly['cum_return'] = (1 + df_spy_monthly['return']).cumprod()
-                
-                # IRX 매핑
-                df_spy_monthly['irx_annual'] = irx_series.reindex(df_spy_monthly.index).ffill().fillna(0.045)
+
+                # IRX 매핑 (SPY 인덱스는 15일 기준 → nearest로 동일 월 IRX 매핑)
+                df_spy_monthly['irx_annual'] = irx_series.reindex(df_spy_monthly.index, method='nearest').fillna(0.045)
                 df_spy_monthly['rf_period'] = df_spy_monthly['irx_annual'] / 12
                 df_spy_monthly['excess_return'] = df_spy_monthly['return'] - df_spy_monthly['rf_period']
-                
+
                 # 변수명 교체 (이후 로직 호환성)
                 df_spy = df_spy_monthly
 
             # (3) KOSPI Data에 Rf 매핑
             if not df_kospi.empty:
-                # KOSPI 월간 데이터 변환
-                df_kospi_monthly = df_kospi['Close'].resample('ME').last().to_frame()
-                
+                # KOSPI 월간 데이터 변환 (매월 15일 기준: 15일 이하 마지막 거래일)
+                kospi_close = df_kospi['Close']
+                kospi_15 = kospi_close[kospi_close.index.day <= 15]
+                df_kospi_monthly = kospi_15.groupby(kospi_15.index.to_period('M')).last().to_frame()
+                df_kospi_monthly.index = df_kospi_monthly.index.to_timestamp() + pd.offsets.Day(14)
+
                 df_kospi_monthly['return'] = df_kospi_monthly['Close'].pct_change().fillna(0)
                 df_kospi_monthly['cum_return'] = (1 + df_kospi_monthly['return']).cumprod()
-                
-                df_kospi_monthly['irx_annual'] = irx_series.reindex(df_kospi_monthly.index).ffill().fillna(0.045)
+
+                df_kospi_monthly['irx_annual'] = irx_series.reindex(df_kospi_monthly.index, method='nearest').fillna(0.045)
                 df_kospi_monthly['rf_period'] = df_kospi_monthly['irx_annual'] / 12
                 df_kospi_monthly['excess_return'] = df_kospi_monthly['return'] - df_kospi_monthly['rf_period']
                 df_kospi = df_kospi_monthly
@@ -242,10 +247,11 @@ class AnalysisWorker(QThread):
                     continue
 
                 start_dt = sub_user.index[0]
-                
-                # 벤치마크 데이터 기간 동기화 (내 포트폴리오 시작 시점과 일치)
-                sub_spy = df_spy[df_spy.index >= start_dt] if not df_spy.empty else pd.DataFrame()
-                sub_kospi = df_kospi[df_kospi.index >= start_dt] if not df_kospi.empty else pd.DataFrame()
+
+                # 벤치마크 데이터 기간 동기화 (월 기준 비교: 포트 월말 vs 벤치마크 15일 인덱스 불일치 방지)
+                start_period = start_dt.to_period('M')
+                sub_spy = df_spy[df_spy.index.to_period('M') >= start_period] if not df_spy.empty else pd.DataFrame()
+                sub_kospi = df_kospi[df_kospi.index.to_period('M') >= start_period] if not df_kospi.empty else pd.DataFrame()
 
                 m_user = calc_metrics(sub_user)
                 m_spy = calc_metrics(sub_spy)
