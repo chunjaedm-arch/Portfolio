@@ -46,13 +46,15 @@ function roiColor(roi: number | null): string {
 
 export default function HistoryView({ rows, yearly, currentFAsset, currentTAsset, onSave, onDelete }: HistoryViewProps) {
   const today = new Date().toISOString().slice(0, 10)
-  const [form, setForm] = useState({
+  const defaultForm = {
     date: today,
     f_asset: currentFAsset > 0 ? String(Math.round(currentFAsset)) : '',
     t_asset: currentTAsset > 0 ? String(Math.round(currentTAsset)) : '',
     deposit: '',
     memo: '',
-  })
+  }
+  const [form, setForm] = useState(defaultForm)
+  const [isEditing, setIsEditing] = useState(false)
   const [saving, setSaving] = useState(false)
 
   function selectRow(row: HistoryRow) {
@@ -63,17 +65,32 @@ export default function HistoryView({ rows, yearly, currentFAsset, currentTAsset
       deposit: String(Math.round(row.deposit)),
       memo:    row.memo,
     })
+    setIsEditing(true)
   }
 
-  async function handleSave() {
+  function parseForm() {
+    return {
+      date: form.date,
+      fAsset: parseFloat(form.f_asset.replace(/,/g, '')) || 0,
+      tAsset: parseFloat(form.t_asset.replace(/,/g, '')) || 0,
+      deposit: parseFloat(form.deposit.replace(/,/g, '')) || 0,
+      memo: form.memo,
+    }
+  }
+
+  async function handleNew() {
+    const { date, fAsset, tAsset, deposit, memo } = parseForm()
     setSaving(true)
-    await onSave(
-      form.date,
-      parseFloat(form.f_asset.replace(/,/g, '')) || 0,
-      parseFloat(form.t_asset.replace(/,/g, '')) || 0,
-      parseFloat(form.deposit.replace(/,/g, '')) || 0,
-      form.memo,
-    )
+    await onSave(date, fAsset, tAsset, deposit, memo)
+    setForm(defaultForm)
+    setIsEditing(false)
+    setSaving(false)
+  }
+
+  async function handleUpdate() {
+    const { date, fAsset, tAsset, deposit, memo } = parseForm()
+    setSaving(true)
+    await onSave(date, fAsset, tAsset, deposit, memo)
     setSaving(false)
   }
 
@@ -82,6 +99,8 @@ export default function HistoryView({ rows, yearly, currentFAsset, currentTAsset
     if (!confirm(`[${form.date}] 기록을 삭제하시겠습니까?`)) return
     setSaving(true)
     await onDelete(form.date)
+    setForm(defaultForm)
+    setIsEditing(false)
     setSaving(false)
   }
 
@@ -151,15 +170,20 @@ export default function HistoryView({ rows, yearly, currentFAsset, currentTAsset
             <div className="col-span-2"><label className="text-xs" style={{ color: '#9e9e9e' }}>비고</label>{inp('memo', '비고')}</div>
           </div>
           <div className="flex justify-end gap-2 mt-3">
-            <button onClick={handleDelete} disabled={saving}
+            <button onClick={handleDelete} disabled={!isEditing || saving}
               className="px-4 py-2 rounded text-sm font-bold"
-              style={{ background: '#C62828', color: 'white', minHeight: '40px' }}>
+              style={{ background: '#C62828', color: 'white', minHeight: '40px', opacity: !isEditing ? 0.5 : 1 }}>
               🗑️ 삭제
             </button>
-            <button onClick={handleSave} disabled={saving}
+            <button onClick={handleNew} disabled={saving}
               className="px-4 py-2 rounded text-sm font-bold"
-              style={{ background: '#1976D2', color: 'white', minHeight: '40px' }}>
-              {saving ? '저장 중...' : '💾 저장'}
+              style={{ background: '#1565C0', color: 'white', minHeight: '40px' }}>
+              {saving ? '저장 중...' : '➕ 신규등록'}
+            </button>
+            <button onClick={handleUpdate} disabled={!isEditing || saving}
+              className="px-4 py-2 rounded text-sm font-bold"
+              style={{ background: '#1976D2', color: 'white', minHeight: '40px', opacity: !isEditing ? 0.5 : 1 }}>
+              {saving ? '저장 중...' : '✏️ 수정'}
             </button>
           </div>
         </div>
