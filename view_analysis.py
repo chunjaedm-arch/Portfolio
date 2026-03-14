@@ -152,8 +152,8 @@ class AnalysisWorker(QThread):
                 df_spy_monthly['return'] = df_spy_monthly['Close'].pct_change().fillna(0)
                 df_spy_monthly['cum_return'] = (1 + df_spy_monthly['return']).cumprod()
 
-                # IRX 매핑
-                df_spy_monthly['irx_annual'] = irx_series.reindex(df_spy_monthly.index, method='ffill').fillna(0.045)
+                # IRX 매핑 (SPY 인덱스는 15일 기준 → nearest로 동일 월 IRX 매핑)
+                df_spy_monthly['irx_annual'] = irx_series.reindex(df_spy_monthly.index, method='nearest').fillna(0.045)
                 df_spy_monthly['rf_period'] = df_spy_monthly['irx_annual'] / 12
                 df_spy_monthly['excess_return'] = df_spy_monthly['return'] - df_spy_monthly['rf_period']
 
@@ -171,7 +171,7 @@ class AnalysisWorker(QThread):
                 df_kospi_monthly['return'] = df_kospi_monthly['Close'].pct_change().fillna(0)
                 df_kospi_monthly['cum_return'] = (1 + df_kospi_monthly['return']).cumprod()
 
-                df_kospi_monthly['irx_annual'] = irx_series.reindex(df_kospi_monthly.index, method='ffill').fillna(0.045)
+                df_kospi_monthly['irx_annual'] = irx_series.reindex(df_kospi_monthly.index, method='nearest').fillna(0.045)
                 df_kospi_monthly['rf_period'] = df_kospi_monthly['irx_annual'] / 12
                 df_kospi_monthly['excess_return'] = df_kospi_monthly['return'] - df_kospi_monthly['rf_period']
                 df_kospi = df_kospi_monthly
@@ -247,10 +247,11 @@ class AnalysisWorker(QThread):
                     continue
 
                 start_dt = sub_user.index[0]
-                
-                # 벤치마크 데이터 기간 동기화 (내 포트폴리오 시작 시점과 일치)
-                sub_spy = df_spy[df_spy.index >= start_dt] if not df_spy.empty else pd.DataFrame()
-                sub_kospi = df_kospi[df_kospi.index >= start_dt] if not df_kospi.empty else pd.DataFrame()
+
+                # 벤치마크 데이터 기간 동기화 (월 기준 비교: 포트 월말 vs 벤치마크 15일 인덱스 불일치 방지)
+                start_period = start_dt.to_period('M')
+                sub_spy = df_spy[df_spy.index.to_period('M') >= start_period] if not df_spy.empty else pd.DataFrame()
+                sub_kospi = df_kospi[df_kospi.index.to_period('M') >= start_period] if not df_kospi.empty else pd.DataFrame()
 
                 m_user = calc_metrics(sub_user)
                 m_spy = calc_metrics(sub_spy)
