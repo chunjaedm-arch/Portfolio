@@ -70,6 +70,7 @@ interface AssetViewProps {
 
 export default function AssetView({ items, onSave, onDelete }: AssetViewProps) {
   const [form, setForm] = useState<EditForm>(EMPTY_FORM)
+  const [isEditing, setIsEditing] = useState(false)
   const [saving, setSaving] = useState(false)
 
   function selectRow(item: AssetItem) {
@@ -85,9 +86,19 @@ export default function AssetView({ items, onSave, onDelete }: AssetViewProps) {
       목표비중:    item.target_ratio > 0 ? String(item.target_ratio) : '',
       비고:        item.note,
     })
+    setIsEditing(true)
   }
 
-  async function handleSave() {
+  async function handleNew() {
+    if (!form.name) return
+    setSaving(true)
+    await onSave(form.name, form)
+    setForm(EMPTY_FORM)
+    setIsEditing(false)
+    setSaving(false)
+  }
+
+  async function handleUpdate() {
     if (!form.name) return
     setSaving(true)
     await onSave(form.name, form)
@@ -100,6 +111,7 @@ export default function AssetView({ items, onSave, onDelete }: AssetViewProps) {
     setSaving(true)
     await onDelete(form.name)
     setForm(EMPTY_FORM)
+    setIsEditing(false)
     setSaving(false)
   }
 
@@ -189,7 +201,7 @@ export default function AssetView({ items, onSave, onDelete }: AssetViewProps) {
 
         <div className="flex justify-end gap-2 mt-3">
           <button
-            onClick={() => setForm(EMPTY_FORM)}
+            onClick={() => { setForm(EMPTY_FORM); setIsEditing(false) }}
             className="px-4 py-2 rounded text-sm"
             style={{ background: '#2d2d3f', color: '#9e9e9e', minHeight: '40px' }}
           >
@@ -197,19 +209,27 @@ export default function AssetView({ items, onSave, onDelete }: AssetViewProps) {
           </button>
           <button
             onClick={handleDelete}
-            disabled={!form.name || saving}
+            disabled={!isEditing || saving}
             className="px-4 py-2 rounded text-sm font-bold"
-            style={{ background: '#C62828', color: 'white', minHeight: '40px', opacity: !form.name ? 0.5 : 1 }}
+            style={{ background: '#C62828', color: 'white', minHeight: '40px', opacity: !isEditing ? 0.5 : 1 }}
           >
             🗑️ 삭제
           </button>
           <button
-            onClick={handleSave}
+            onClick={handleNew}
             disabled={!form.name || saving}
             className="px-4 py-2 rounded text-sm font-bold"
-            style={{ background: '#2E7D32', color: 'white', minHeight: '40px', opacity: !form.name ? 0.5 : 1 }}
+            style={{ background: '#1565C0', color: 'white', minHeight: '40px', opacity: !form.name ? 0.5 : 1 }}
           >
-            {saving ? '저장 중...' : '💾 저장/업데이트'}
+            {saving ? '저장 중...' : '➕ 신규등록'}
+          </button>
+          <button
+            onClick={handleUpdate}
+            disabled={!isEditing || saving}
+            className="px-4 py-2 rounded text-sm font-bold"
+            style={{ background: '#2E7D32', color: 'white', minHeight: '40px', opacity: !isEditing ? 0.5 : 1 }}
+          >
+            {saving ? '저장 중...' : '✏️ 수정'}
           </button>
         </div>
       </div>
