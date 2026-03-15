@@ -106,7 +106,7 @@ def run_analysis(history_data: list, current_f_asset: float = 0.0) -> dict:
             rf = df['irx_annual'].mean() if 'irx_annual' in df.columns else 0.045
             return {'cagr': cagr, 'mdd': mdd, 'sharpe': sharpe, 'sortino': sortino, 'rf_avg': rf}
 
-        periods_map = {'All': 0, '6M': 6, '1Y': 12, '1.5Y': 18, '2Y': 24,
+        periods_map = {'All': 0, '1M': 1, '3M': 3, '6M': 6, '1Y': 12, '1.5Y': 18, '2Y': 24,
                        '2.5Y': 30, '3Y': 36, '3.5Y': 42, '4Y': 48, '4.5Y': 54, '5Y': 60}
         raw_matrix = {}
         for p_name, months in periods_map.items():
@@ -155,7 +155,7 @@ def run_analysis(history_data: list, current_f_asset: float = 0.0) -> dict:
         chart_html = _gen_analysis_chart(df_user, df_spy, df_kospi)
 
         # 매트릭스 테이블용 직렬화
-        periods_order = ['All','6M','1Y','1.5Y','2Y','2.5Y','3Y','3.5Y','4Y','4.5Y','5Y']
+        periods_order = ['All','1M','3M','6M','1Y','1.5Y','2Y','2.5Y','3Y','3.5Y','4Y','4.5Y','5Y']
         rows_def = [
             ("CAGR (내 포트)", 'cagr', 'user', True),
             ("CAGR (SPY)",    'cagr', 'spy',  True),
