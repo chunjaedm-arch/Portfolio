@@ -97,7 +97,7 @@ class AnalysisWorker(QThread):
 
             # KOSPI (Benchmark 2) - FinanceDataReader
             try:
-                df_kospi = fdr.DataReader('KS11', start_date, end_date)
+                df_kospi = fdr.DataReader('^KS11', start_date, end_date)
             except Exception as e:
                 print(f"KOSPI(FDR) Load Error: {e}")
                 df_kospi = pd.DataFrame()
