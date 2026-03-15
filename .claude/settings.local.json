@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(where uvicorn:*)",
+      "Bash(where node:*)",
+      "Bash(grep -r \"firebase\\\\|firestore\" /c/vscode/portfolio1.6/*.py -l)",
+      "Bash(ls /c/vscode/portfolio1.6/.env*)",
+      "Bash(git -C /c/vscode/portfolio1.6 log --all --oneline -- .env config.py)"
+    ]
+  }
+}

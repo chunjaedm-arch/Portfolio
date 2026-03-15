@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xargs grep:*)",
+      "Bash(grep -n \"innerHTML\\\\|dangerouslySetInnerHTML\\\\|eval\\\\|exec\" /c/vscode/portfolio1.6/web/src/components/*.tsx)",
+      "Bash(ls /c/vscode/portfolio1.6/web/.env*)"
+    ]
+  }
+}
