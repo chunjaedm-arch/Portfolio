@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import NavBar, { ActiveTab } from '@/components/NavBar'
-import Dashboard, { DashboardData, MOCK_DATA } from '@/components/Dashboard'
+import Dashboard, { DashboardData } from '@/components/Dashboard'
 import AssetView, { AssetItem, EditForm } from '@/components/AssetView'
 import HistoryView, { HistoryRow, YearlyRow } from '@/components/HistoryView'
 import ChartView from '@/components/ChartView'
@@ -12,9 +12,11 @@ type FetchStatus = 'idle' | 'loading' | 'ok' | 'error'
 
 export default function Home() {
   const [activeTab, setActiveTab]     = useState<ActiveTab>('asset')
-  const [marketData, setMarketData]   = useState<DashboardData>(MOCK_DATA)
+  const [marketData, setMarketData]   = useState<DashboardData | null>(null)
+  const [marketReady, setMarketReady]     = useState(false)
+  const [portfolioReady, setPortfolioReady] = useState(false)
   const [status, setStatus]           = useState<FetchStatus>('idle')
-  const [source, setSource]           = useState('목 데이터')
+  const [source, setSource]           = useState('')
   const [lastUpdated, setLastUpdated] = useState('')
 
   // 자산 관리
@@ -43,16 +45,17 @@ export default function Home() {
     try {
       const raw = await (await fetch('/api/market')).json()
       setMarketData(prev => ({
-        ...prev,
+        ...(prev ?? {}),
         usd_rate: raw.usd_rate, jpy_rate: raw.jpy_rate,
         cny_rate: raw.cny_rate, brl_rate: raw.brl_rate,
         indices: raw.indices,   gold_info: raw.gold_info,
         kimp: raw.kimp, krx_prem: raw.krx_prem,
         iau_prem: raw.iau_prem, gold_spread: raw.gold_spread,
-      }))
+      } as DashboardData))
       setSource(raw.source ?? '-')
       setLastUpdated(new Date().toLocaleTimeString('ko-KR'))
       setStatus('ok')
+      setMarketReady(true)
     } catch { setStatus('error') }
   }, [])
 
@@ -63,17 +66,18 @@ export default function Home() {
       setAssetItems(raw.items ?? [])
       setAssetLoaded(true)
       setMarketData(prev => ({
-        ...prev,
-        f_total:   raw.f_total   ?? prev.f_total,
-        all_total: raw.all_total ?? prev.all_total,
-        roi:       raw.roi       ?? prev.roi,
-        growth:    raw.growth    ?? prev.growth,
-        peak_val:  raw.peak_val  ?? prev.peak_val,
-        peak_date: raw.peak_date ?? prev.peak_date,
-        mdd_val:   raw.mdd_val   ?? prev.mdd_val,
-        mdd_pct:   raw.mdd_pct   ?? prev.mdd_pct,
-      }))
+        ...(prev ?? {}),
+        f_total:   raw.f_total   ?? prev?.f_total,
+        all_total: raw.all_total ?? prev?.all_total,
+        roi:       raw.roi       ?? prev?.roi,
+        growth:    raw.growth    ?? prev?.growth,
+        peak_val:  raw.peak_val  ?? prev?.peak_val,
+        peak_date: raw.peak_date ?? prev?.peak_date,
+        mdd_val:   raw.mdd_val   ?? prev?.mdd_val,
+        mdd_pct:   raw.mdd_pct   ?? prev?.mdd_pct,
+      } as DashboardData))
       setLastUpdated(new Date().toLocaleTimeString('ko-KR'))
+      setPortfolioReady(true)
     } catch (e) { console.error(e) }
   }, [])
 
@@ -108,11 +112,11 @@ export default function Home() {
     } catch (e) { console.error(e) }
   }, [])
 
-  // ─── 탭 전환 시 지연 로드 ───────────────────────────────
+  // ─── 탭 전환 시 지연 로드 (백그라운드 프리페치 미완료 시 fallback) ─
   useEffect(() => {
-    if (activeTab === 'history' && !historyLoaded) fetchHistory()
-    if (activeTab === 'chart'   && !chartsLoaded)  fetchCharts()
-    if (activeTab === 'analysis'&& !analysisLoaded) fetchAnalysis()
+    if (activeTab === 'history'  && !historyLoaded)  fetchHistory()
+    if (activeTab === 'chart'    && !chartsLoaded)   fetchCharts()
+    if (activeTab === 'analysis' && !analysisLoaded) fetchAnalysis()
   }, [activeTab, historyLoaded, chartsLoaded, analysisLoaded, fetchHistory, fetchCharts, fetchAnalysis])
 
   // 최초 로드
@@ -120,6 +124,16 @@ export default function Home() {
     fetchMarket()
     fetchPortfolio()
   }, [fetchMarket, fetchPortfolio])
+
+  // 초기 로드 완료 후 백그라운드 프리페치
+  const bgFetched = useRef(false)
+  useEffect(() => {
+    if (!marketReady || !portfolioReady || bgFetched.current) return
+    bgFetched.current = true
+    fetchHistory()
+    fetchCharts()
+    fetchAnalysis()
+  }, [marketReady, portfolioReady, fetchHistory, fetchCharts, fetchAnalysis])
 
   // 새로고침
   const handleRefresh = useCallback(async () => {
@@ -129,6 +143,20 @@ export default function Home() {
     if (activeTab === 'chart')    await fetchCharts()
     if (activeTab === 'analysis') await fetchAnalysis()
   }, [fetchMarket, fetchPortfolio, fetchHistory, fetchCharts, fetchAnalysis, activeTab])
+
+  // ─── 내보내기 ────────────────────────────────────────────
+  const handleExport = useCallback(async () => {
+    const res = await fetch('/api/export')
+    if (!res.ok) { alert('내보내기 실패'); return }
+    const blob = await res.blob()
+    const disposition = res.headers.get('content-disposition') ?? ''
+    const match = disposition.match(/filename=([^;]+)/)
+    const filename = match ? match[1] : 'export.zip'
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = filename; a.click()
+    URL.revokeObjectURL(url)
+  }, [])
 
   // ─── 자산 CRUD ──────────────────────────────────────────
   async function handleAssetSave(name: string, form: EditForm) {
@@ -170,9 +198,9 @@ export default function Home() {
   return (
     <div className="flex flex-col min-h-screen" style={{ background: '#121212', color: '#e0e0e0' }}>
       <NavBar activeTab={activeTab} onTabChange={setActiveTab}
-        onRefresh={handleRefresh} status={statusLabel} source={source} />
+        onRefresh={handleRefresh} onExport={handleExport} status={statusLabel} source={source} />
 
-      <Dashboard data={marketData} />
+      <Dashboard data={marketReady && portfolioReady ? marketData : null} />
 
       <div className="flex-1 p-2">
         {activeTab === 'asset' && (
@@ -184,7 +212,7 @@ export default function Home() {
           historyLoaded
             ? <HistoryView
                 rows={historyRows} yearly={yearlyRows}
-                currentFAsset={marketData.f_total} currentTAsset={marketData.all_total}
+                currentFAsset={marketData?.f_total ?? 0} currentTAsset={marketData?.all_total ?? 0}
                 onSave={handleHistorySave} onDelete={handleHistoryDelete} />
             : <Spinner />
         )}

@@ -13,11 +13,12 @@ interface NavBarProps {
   activeTab: ActiveTab
   onTabChange: (tab: ActiveTab) => void
   onRefresh?: () => void
+  onExport?: () => void
   status?: string
   source?: string
 }
 
-export default function NavBar({ activeTab, onTabChange, onRefresh, status, source }: NavBarProps) {
+export default function NavBar({ activeTab, onTabChange, onRefresh, onExport, status, source }: NavBarProps) {
   return (
     <nav className="flex items-center gap-1 px-2 py-1.5 border-b"
       style={{ background: '#1a1a2e', borderColor: '#2d2d3f' }}>
@@ -61,6 +62,7 @@ export default function NavBar({ activeTab, onTabChange, onRefresh, status, sour
         🔄 새로고침
       </button>
       <button
+        onClick={onExport}
         className="px-3 rounded text-sm transition-colors hover:bg-white/10"
         style={{ minHeight: '44px', color: '#e0e0e0' }}
       >

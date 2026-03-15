@@ -21,7 +21,7 @@ interface AnalysisViewProps {
   matrix: MatrixRow[]
 }
 
-const PERIODS = ['All','6M','1Y','1.5Y','2Y','2.5Y','3Y','3.5Y','4Y','4.5Y','5Y']
+const PERIODS = ['All','1M','3M','6M','1Y','1.5Y','2Y','2.5Y','3Y','3.5Y','4Y','4.5Y','5Y']
 
 function MetricCard({ title, userVal, spyVal, kospiVal, isPct = true }:
   { title: string; userVal: number; spyVal: number; kospiVal: number; isPct?: boolean }) {

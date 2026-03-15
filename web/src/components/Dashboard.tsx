@@ -34,42 +34,6 @@ export interface DashboardData {
   mdd_pct: number
 }
 
-// 목 데이터 (API 연동 전 테스트용)
-export const MOCK_DATA: DashboardData = {
-  usd_rate: 1450.50,
-  jpy_rate: 0.00965,
-  cny_rate: 200.30,
-  brl_rate: 255.80,
-  indices: {
-    'KOSPI':     { price: 2550.12, change: 0.45 },
-    'KOSDAQ':    { price: 720.33,  change: -1.23 },
-    'S&P500':    { price: 5800.45, change: 0.82 },
-    'NASDAQ':    { price: 18500.21,change: 1.15 },
-    'Nikkei225': { price: 39500.00,change: -0.35 },
-    'HangSeng':  { price: 17200.50,change: 0.62 },
-    'VIX':       { price: 18.50,   change: -2.10 },
-    'US10Y':     { price: 4.45,    change: 0.03 },
-  },
-  gold_info: {
-    int_spot:      131500,
-    int_future:    132000,
-    krx_spot:      136000,
-    iau_krw_g:     133500,
-    domestic_spot: 138000,
-  },
-  kimp: 2.35,
-  krx_prem: 3.42,
-  iau_prem: 1.52,
-  gold_spread: 0.38,
-  f_total:   85000000,
-  all_total: 350000000,
-  roi:    2.35,
-  growth: 1.85,
-  peak_val:  92000000,
-  peak_date: '2024-10',
-  mdd_val:   7000000,
-  mdd_pct:   7.61,
-}
 
 // ─── 색상 헬퍼 ───────────────────────────────────────────
 function indexColor(change: number) {
@@ -263,8 +227,31 @@ function AssetSummaryPanel({ data }: { data: DashboardData }) {
   )
 }
 
+// ─── 로딩 스켈레톤 ───────────────────────────────────────
+function LoadingPanel({ title }: { title: string }) {
+  return (
+    <Panel title={title}>
+      <div className="flex items-center justify-center py-4 text-xs" style={{ color: '#9e9e9e' }}>
+        로딩중...
+      </div>
+    </Panel>
+  )
+}
+
 // ─── 메인 Dashboard ───────────────────────────────────────
-export default function Dashboard({ data = MOCK_DATA }: { data?: DashboardData }) {
+export default function Dashboard({ data }: { data: DashboardData | null }) {
+  if (data === null) {
+    return (
+      <div className="grid gap-2 p-2"
+        style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+        <LoadingPanel title="💱 거래 지표" />
+        <LoadingPanel title="📊 차익 거래" />
+        <LoadingPanel title="🏅 현물 지표" />
+        <LoadingPanel title="💰 자산 요약" />
+      </div>
+    )
+  }
+
   return (
     <div className="grid gap-2 p-2"
       style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
