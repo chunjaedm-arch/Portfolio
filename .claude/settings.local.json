@@ -5,7 +5,10 @@
       "Bash(where node:*)",
       "Bash(grep -r \"firebase\\\\|firestore\" /c/vscode/portfolio1.6/*.py -l)",
       "Bash(ls /c/vscode/portfolio1.6/.env*)",
-      "Bash(git -C /c/vscode/portfolio1.6 log --all --oneline -- .env config.py)"
+      "Bash(git -C /c/vscode/portfolio1.6 log --all --oneline -- .env config.py)",
+      "Bash(python -c \"import FinanceDataReader as fdr; print\\(fdr.__version__\\)\")",
+      "Bash(python -c \":*)",
+      "Bash(grep -r \"symbol\\\\|ticker\" /c/vscode/portfolio1.6/*.py)"
     ]
   }
 }

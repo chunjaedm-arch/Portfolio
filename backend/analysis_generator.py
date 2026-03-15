@@ -55,7 +55,7 @@ def run_analysis(history_data: list, current_f_asset: float = 0.0) -> dict:
         df_spy = yf.Ticker("SPY").history(start=start_date, end=end_date, auto_adjust=True)
         # KOSPI
         try:
-            df_kospi = fdr.DataReader('KS11', start_date, end_date)
+            df_kospi = fdr.DataReader('^KS11', start_date, end_date)
         except:
             df_kospi = pd.DataFrame()
         if df_kospi.empty:
