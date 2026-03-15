@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import NavBar, { ActiveTab } from '@/components/NavBar'
 import Dashboard, { DashboardData, MOCK_DATA } from '@/components/Dashboard'
-import AssetView, { AssetItem } from '@/components/AssetView'
+import AssetView, { AssetItem, EditForm } from '@/components/AssetView'
 import HistoryView, { HistoryRow, YearlyRow } from '@/components/HistoryView'
 import ChartView from '@/components/ChartView'
 import AnalysisView, { AnalysisMetrics, MatrixRow } from '@/components/AnalysisView'
@@ -131,7 +131,7 @@ export default function Home() {
   }, [fetchMarket, fetchPortfolio, fetchHistory, fetchCharts, fetchAnalysis, activeTab])
 
   // ─── 자산 CRUD ──────────────────────────────────────────
-  async function handleAssetSave(name: string, form: Record<string, string>) {
+  async function handleAssetSave(name: string, form: EditForm) {
     const res = await fetch(`/api/portfolio/${encodeURIComponent(name)}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },

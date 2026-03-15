@@ -22,7 +22,7 @@ export interface AssetItem {
   updated_at: string
 }
 
-interface EditForm {
+export interface EditForm {
   name: string
   대분류: string
   소분류: string

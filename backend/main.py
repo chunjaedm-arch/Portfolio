@@ -3,9 +3,10 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from datetime import datetime, timedelta
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
@@ -23,10 +24,21 @@ app = FastAPI(title="Portfolio API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://SDMTechnology.asuscomm.com",
+        "https://SDMTechnology.asuscomm.com",
+    ],
     allow_methods=["GET", "POST", "PATCH", "DELETE"],
     allow_headers=["*"],
 )
+
+_API_KEY = os.environ.get("API_SECRET_KEY", "")
+_api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+async def _verify_key(key: str = Depends(_api_key_header)):
+    if not _API_KEY or key != _API_KEY:
+        raise HTTPException(status_code=403, detail="Forbidden")
 
 api = APIManager()
 db  = DBManager(config['projectId'], config['apiKey'])
@@ -123,13 +135,13 @@ def _fetch_market_data() -> dict:
 
 
 # ─── 엔드포인트: 마켓 ────────────────────────────────────
-@app.get("/api/market")
+@app.get("/api/market", dependencies=[Depends(_verify_key)])
 async def get_market():
     return _fetch_market_data()
 
 
 # ─── 엔드포인트: 포트폴리오 ──────────────────────────────
-@app.get("/api/portfolio")
+@app.get("/api/portfolio", dependencies=[Depends(_verify_key)])
 async def get_portfolio():
     try:
         market = _fetch_market_data()
@@ -208,7 +220,7 @@ class AssetPayload(BaseModel):
     fields: dict
 
 
-@app.patch("/api/portfolio/{name}")
+@app.patch("/api/portfolio/{name}", dependencies=[Depends(_verify_key)])
 async def save_asset(name: str, body: AssetPayload):
     try:
         payload = {
@@ -231,7 +243,7 @@ async def save_asset(name: str, body: AssetPayload):
 
 
 # ─── 엔드포인트: 자산 삭제 ───────────────────────────────
-@app.delete("/api/portfolio/{name}")
+@app.delete("/api/portfolio/{name}", dependencies=[Depends(_verify_key)])
 async def delete_asset(name: str):
     try:
         _with_auth(db.delete_asset, name)
@@ -266,7 +278,7 @@ def _get_history_cache() -> list:
 
 
 # ─── 엔드포인트: 히스토리 조회 ───────────────────────────
-@app.get("/api/history")
+@app.get("/api/history", dependencies=[Depends(_verify_key)])
 async def get_history():
     try:
         cache = _get_history_cache()
@@ -296,7 +308,7 @@ class HistoryPayload(BaseModel):
     memo: str = ""
 
 
-@app.patch("/api/history/{date_id}")
+@app.patch("/api/history/{date_id}", dependencies=[Depends(_verify_key)])
 async def save_history(date_id: str, body: HistoryPayload):
     try:
         payload = {"fields": {
@@ -312,7 +324,7 @@ async def save_history(date_id: str, body: HistoryPayload):
 
 
 # ─── 엔드포인트: 히스토리 삭제 ───────────────────────────
-@app.delete("/api/history/{date_id}")
+@app.delete("/api/history/{date_id}", dependencies=[Depends(_verify_key)])
 async def delete_history(date_id: str):
     try:
         _with_auth(db.delete_history, date_id)
@@ -322,7 +334,7 @@ async def delete_history(date_id: str):
 
 
 # ─── 엔드포인트: 차트 HTML 생성 ──────────────────────────
-@app.get("/api/charts")
+@app.get("/api/charts", dependencies=[Depends(_verify_key)])
 async def get_charts():
     try:
         market  = _fetch_market_data()
@@ -344,7 +356,7 @@ ANALYSIS_CACHE_TTL = 300  # 5분
 
 
 # ─── 엔드포인트: 분석 ────────────────────────────────────
-@app.get("/api/analysis")
+@app.get("/api/analysis", dependencies=[Depends(_verify_key)])
 async def get_analysis():
     global _analysis_cache, _analysis_cache_at
     now = datetime.now()
