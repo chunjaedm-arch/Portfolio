@@ -176,9 +176,10 @@ class AnalysisWorker(QThread):
                 df_kospi_monthly['excess_return'] = df_kospi_monthly['return'] - df_kospi_monthly['rf_period']
                 df_kospi = df_kospi_monthly
             
-            # 3. Metrics Calculation (Matrix: All + 6M intervals up to 5Y)
+            # 3. Metrics Calculation (Matrix: All + 1M/3M/6M intervals up to 5Y)
             periods_map = {
                 'All': 0,
+                '2M': 2, '3M': 3,
                 '6M': 6,
                 '1Y': 12, '1.5Y': 18,
                 '2Y': 24, '2.5Y': 30,
@@ -208,21 +209,23 @@ class AnalysisWorker(QThread):
                 dd = cum / cum.cummax() - 1
                 mdd = dd.min()
 
-                # Sharpe
-                mean_ex = df['excess_return'].mean() * freq
-                std_ex = df['excess_return'].std() * np.sqrt(freq)
-                sharpe = mean_ex / std_ex if (std_ex != 0 and not np.isnan(std_ex)) else 0.0
+                # Sharpe / Sortino (최소 6개월 이상 데이터가 있어야 의미있는 값)
+                if len(df) < 6:
+                    sharpe, sortino = None, None
+                else:
+                    mean_ex = df['excess_return'].mean() * freq
+                    std_ex = df['excess_return'].std() * np.sqrt(freq)
+                    sharpe = mean_ex / std_ex if (std_ex != 0 and not np.isnan(std_ex)) else 0.0
 
-                # Sortino
-                downside = df[df['excess_return'] < 0]['excess_return']
-                down_dev = 0.0
-                if len(downside) > 0:
-                    down_dev = np.sqrt((downside**2).sum()/len(df)) * np.sqrt(freq)
+                    downside = df[df['excess_return'] < 0]['excess_return']
+                    down_dev = 0.0
+                    if len(downside) > 0:
+                        down_dev = np.sqrt((downside**2).sum()/len(df)) * np.sqrt(freq)
 
-                if down_dev > 0:
-                    sortino = mean_ex / down_dev
-                else: # 하방 편차(downside deviation)가 없는 경우
-                    sortino = 99.9 if mean_ex > 0 else 0.0
+                    if down_dev > 0:
+                        sortino = mean_ex / down_dev
+                    else:
+                        sortino = 99.9 if mean_ex > 0 else 0.0
 
                 # Rf Avg
                 rf = df['irx_annual'].mean() if 'irx_annual' in df.columns else 0.045
@@ -604,8 +607,8 @@ class AnalysisView(QWidget):
     def update_matrix_table(self, matrix):
         if not matrix: return
         
-        periods = ['All', '6M', '1Y', '1.5Y', '2Y', '2.5Y', '3Y', '3.5Y', '4Y', '4.5Y', '5Y']
-        headers = ["지표 (Metric)", "전체 (All)", "최근 6개월", "최근 1년", "최근 1.5년", "최근 2년", "최근 2.5년", "최근 3년", "최근 3.5년", "최근 4년", "최근 4.5년", "최근 5년"]
+        periods = ['All', '2M', '3M', '6M', '1Y', '1.5Y', '2Y', '2.5Y', '3Y', '3.5Y', '4Y', '4.5Y', '5Y']
+        headers = ["지표 (Metric)", "전체 (All)", "최근 2개월", "최근 3개월", "최근 6개월", "최근 1년", "최근 1.5년", "최근 2년", "최근 2.5년", "최근 3년", "최근 3.5년", "최근 4년", "최근 4.5년", "최근 5년"]
         
         rows_def = [
             ("CAGR (내 포트)", 'cagr', 'user', True),

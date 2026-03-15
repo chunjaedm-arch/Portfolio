@@ -78,10 +78,14 @@ def run_analysis(history_data: list, current_f_asset: float = 0.0) -> dict:
         df_user['excess_return'] = df_user['return'] - df_user['rf_period']
 
         def proc_bench(df_b):
-            m = df_b['Close'].resample('ME').last().to_frame()
+            # 앱 버전과 동일: 매월 15일 이하 마지막 거래일 기준
+            close = df_b['Close']
+            close_15 = close[close.index.day <= 15]
+            m = close_15.groupby(close_15.index.to_period('M')).last().to_frame()
+            m.index = m.index.to_timestamp() + pd.offsets.Day(14)
             m['return'] = m['Close'].pct_change().fillna(0)
             m['cum_return'] = (1 + m['return']).cumprod()
-            m['irx_annual'] = irx_series.reindex(m.index).ffill().fillna(0.045)
+            m['irx_annual'] = irx_series.reindex(m.index, method='nearest').ffill().fillna(0.045)
             m['rf_period'] = m['irx_annual'] / 12
             m['excess_return'] = m['return'] - m['rf_period']
             return m
@@ -97,16 +101,20 @@ def run_analysis(history_data: list, current_f_asset: float = 0.0) -> dict:
             cagr = total_ret - 1 if years < 1 else (total_ret ** (1/years)) - 1
             cum  = (1 + df['return']).cumprod()
             mdd  = (cum / cum.cummax() - 1).min()
-            mean_ex = df['excess_return'].mean() * 12
-            std_ex  = df['excess_return'].std() * np.sqrt(12)
-            sharpe  = mean_ex / std_ex if (std_ex and not np.isnan(std_ex)) else 0.0
-            downside = df[df['excess_return'] < 0]['excess_return']
-            down_dev = np.sqrt((downside**2).sum()/len(df)) * np.sqrt(12) if len(downside) > 0 else 0.0
-            sortino = (mean_ex / down_dev) if down_dev > 0 else (99.9 if mean_ex > 0 else 0.0)
+            # Sharpe/Sortino는 최소 6개월 이상 데이터가 있어야 의미있는 값
+            if len(df) < 6:
+                sharpe, sortino = None, None
+            else:
+                mean_ex = df['excess_return'].mean() * 12
+                std_ex  = df['excess_return'].std() * np.sqrt(12)
+                sharpe  = mean_ex / std_ex if (std_ex and not np.isnan(std_ex)) else 0.0
+                downside = df[df['excess_return'] < 0]['excess_return']
+                down_dev = np.sqrt((downside**2).sum()/len(df)) * np.sqrt(12) if len(downside) > 0 else 0.0
+                sortino = (mean_ex / down_dev) if down_dev > 0 else (99.9 if mean_ex > 0 else 0.0)
             rf = df['irx_annual'].mean() if 'irx_annual' in df.columns else 0.045
             return {'cagr': cagr, 'mdd': mdd, 'sharpe': sharpe, 'sortino': sortino, 'rf_avg': rf}
 
-        periods_map = {'All': 0, '1M': 1, '3M': 3, '6M': 6, '1Y': 12, '1.5Y': 18, '2Y': 24,
+        periods_map = {'All': 0, '2M': 2, '3M': 3, '6M': 6, '1Y': 12, '1.5Y': 18, '2Y': 24,
                        '2.5Y': 30, '3Y': 36, '3.5Y': 42, '4Y': 48, '4.5Y': 54, '5Y': 60}
         raw_matrix = {}
         for p_name, months in periods_map.items():
@@ -155,7 +163,7 @@ def run_analysis(history_data: list, current_f_asset: float = 0.0) -> dict:
         chart_html = _gen_analysis_chart(df_user, df_spy, df_kospi)
 
         # 매트릭스 테이블용 직렬화
-        periods_order = ['All','1M','3M','6M','1Y','1.5Y','2Y','2.5Y','3Y','3.5Y','4Y','4.5Y','5Y']
+        periods_order = ['All','2M','3M','6M','1Y','1.5Y','2Y','2.5Y','3Y','3.5Y','4Y','4.5Y','5Y']
         rows_def = [
             ("CAGR (내 포트)", 'cagr', 'user', True),
             ("CAGR (SPY)",    'cagr', 'spy',  True),

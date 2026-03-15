@@ -111,9 +111,9 @@ class APIManager:
         headers = {'User-Agent': 'Mozilla/5.0'}
 
         try:
-            future_data = yf.download("GC=F", period="1d", progress=False)
+            future_data = yf.download("GC=F", period="5d", progress=False)
             if not future_data.empty:
-                last_val = future_data['Close'].iloc[-1]
+                last_val = future_data['Close'].dropna().iloc[-1]
                 last_price = float(last_val.iloc[0] if hasattr(last_val, 'iloc') else last_val)
                 results['int_future'] = (last_price / oz_to_g) * usd_rate
         except Exception as e:
