@@ -98,6 +98,10 @@ class DataExporter:
                             if key != 'rf_avg':
                                 writer.writerow([f"{label} (SPY)"] + [get_val(key, 'spy', p, is_pct) for p in periods])
                                 writer.writerow([f"{label} (KOSPI)"] + [get_val(key, 'kospi', p, is_pct) for p in periods])
+
+                        # 연환산 변동성 (SPY/KOSPI만 — 포트폴리오는 월간 데이터라 제외)
+                        writer.writerow(["연환산 변동성 (SPY)"]   + [get_val('vol', 'spy',   p, True) for p in periods])
+                        writer.writerow(["연환산 변동성 (KOSPI)"] + [get_val('vol', 'kospi', p, True) for p in periods])
                     else:
                         # 기존 포맷 (Fallback)
                         writer.writerow(["지표", "내 포트폴리오", "S&P 500 (SPY)", "KOSPI"])
