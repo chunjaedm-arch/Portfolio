@@ -233,7 +233,10 @@ class AnalysisWorker(QThread):
                 # Rf Avg
                 rf = df['irx_annual'].mean() if 'irx_annual' in df.columns else 0.045
 
-                return {'cagr': cagr, 'mdd': mdd, 'sharpe': sharpe, 'sortino': sortino, 'rf_avg': rf}
+                # 연환산 변동성 (Annualized Volatility)
+                vol = df['return'].std() * np.sqrt(freq)
+
+                return {'cagr': cagr, 'mdd': mdd, 'sharpe': sharpe, 'sortino': sortino, 'rf_avg': rf, 'vol': vol}
 
             for p_name, months in periods_map.items():
                 if p_name == 'All':
@@ -627,6 +630,8 @@ class AnalysisView(QWidget):
             ("Sortino Ratio (SPY)", 'sortino', 'spy', False),
             ("Sortino Ratio (KOSPI)", 'sortino', 'kospi', False),
             ("Risk-Free Rate (^IRX)", 'rf_avg', 'user', True),
+            ("연환산 변동성 (SPY)", 'vol', 'spy', True),
+            ("연환산 변동성 (KOSPI)", 'vol', 'kospi', True),
         ]
 
         self.matrix_table.setRowCount(len(rows_def))

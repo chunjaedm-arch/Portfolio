@@ -8,7 +8,9 @@
       "Bash(git -C /c/vscode/portfolio1.6 log --all --oneline -- .env config.py)",
       "Bash(python -c \"import FinanceDataReader as fdr; print\\(fdr.__version__\\)\")",
       "Bash(python -c \":*)",
-      "Bash(grep -r \"symbol\\\\|ticker\" /c/vscode/portfolio1.6/*.py)"
+      "Bash(grep -r \"symbol\\\\|ticker\" /c/vscode/portfolio1.6/*.py)",
+      "Bash(grep -r history_cache /c/vscode/portfolio1.6 --include=*.py --include=*.ts --include=*.tsx)",
+      "Bash(grep -r \"save_history\\\\|fetch_history\\\\|delete_history\" /c/vscode/portfolio1.6 --include=*.ts --include=*.tsx)"
     ]
   }
 }

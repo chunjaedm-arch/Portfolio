@@ -115,7 +115,8 @@ def run_analysis(history_data: list, current_f_asset: float = 0.0) -> dict:
                 down_dev = np.sqrt((downside**2).sum()/len(df)) * np.sqrt(12) if len(downside) > 0 else 0.0
                 sortino = (mean_ex / down_dev) if down_dev > 0 else (99.9 if mean_ex > 0 else 0.0)
             rf = df['irx_annual'].mean() if 'irx_annual' in df.columns else 0.045
-            return {'cagr': cagr, 'mdd': mdd, 'sharpe': sharpe, 'sortino': sortino, 'rf_avg': rf}
+            vol = df['return'].std() * np.sqrt(12)
+            return {'cagr': cagr, 'mdd': mdd, 'sharpe': sharpe, 'sortino': sortino, 'rf_avg': rf, 'vol': vol}
 
         periods_map = {'All': 0, '2M': 2, '3M': 3, '6M': 6, '1Y': 12, '1.5Y': 18, '2Y': 24,
                        '2.5Y': 30, '3Y': 36, '3.5Y': 42, '4Y': 48, '4.5Y': 54, '5Y': 60}
@@ -181,6 +182,8 @@ def run_analysis(history_data: list, current_f_asset: float = 0.0) -> dict:
             ("Sortino (SPY)",    'sortino','spy',  False),
             ("Sortino (KOSPI)",  'sortino','kospi',False),
             ("Risk-Free Rate",   'rf_avg', 'user', True),
+            ("연환산 변동성 (SPY)",   'vol', 'spy',   True),
+            ("연환산 변동성 (KOSPI)", 'vol', 'kospi', True),
         ]
         matrix_rows = []
         for label, mk, src, is_pct in rows_def:
