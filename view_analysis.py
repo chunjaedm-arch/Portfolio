@@ -55,12 +55,15 @@ class AnalysisWorker(QThread):
                 'f_asset': 'last',
                 'deposit': 'sum'
             })
-            
+
             # 자산이 비어있는 달(기록 안 한 달)은 전월 자산으로 채움
             df_user['f_asset'] = df_user['f_asset'].ffill()
-            
+
             # 데이터 시작 시점 이전의 NaN 제거 (첫 기록이 있는 달부터 시작)
             df_user = df_user.dropna(subset=['f_asset'])
+
+            # 벤치마크(KOSPI/SPY)와 인덱스 기준 통일: 월말 -> 매월 15일 기준(14일 오프셋)
+            df_user.index = df_user.index.to_period('M').to_timestamp() + pd.offsets.Day(14)
 
             # 수익률 계산: (기말자산 - 순입고 - 기초자산) / 기초자산
             # 기초자산(prev_f)은 '전월 말 자산'
@@ -133,7 +136,7 @@ class AnalysisWorker(QThread):
 
             # (1) User Data에 Rf 매핑
             # 월간 데이터이므로 reindex로 매핑
-            df_user['irx_annual'] = irx_series.reindex(df_user.index).ffill().fillna(0.045)
+            df_user['irx_annual'] = irx_series.reindex(df_user.index, method='nearest').ffill().fillna(0.045)
             
             # 월간 무위험 수익률 = 연이율 / 12
             df_user['rf_period'] = df_user['irx_annual'] / 12

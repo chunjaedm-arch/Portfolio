@@ -34,6 +34,9 @@ def run_analysis(history_data: list, current_f_asset: float = 0.0) -> dict:
         df_user = df_raw.resample('ME').agg({'f_asset': 'last', 'deposit': 'sum'})
         df_user['f_asset'] = df_user['f_asset'].ffill()
         df_user = df_user.dropna(subset=['f_asset'])
+
+        # 벤치마크(KOSPI/SPY)와 인덱스 기준 통일: 월말 -> 매월 15일 기준(14일 오프셋)
+        df_user.index = df_user.index.to_period('M').to_timestamp() + pd.offsets.Day(14)
         df_user['prev_f'] = df_user['f_asset'].shift(1)
         df_user['return'] = 0.0
 
@@ -73,7 +76,7 @@ def run_analysis(history_data: list, current_f_asset: float = 0.0) -> dict:
         df_irx_monthly = df_irx['Close'].resample('ME').mean() if not df_irx.empty else pd.Series()
         irx_series = df_irx_monthly.ffill() / 100 if not df_irx_monthly.empty else pd.Series(0.045, index=df_user.index)
 
-        df_user['irx_annual'] = irx_series.reindex(df_user.index).ffill().fillna(0.045)
+        df_user['irx_annual'] = irx_series.reindex(df_user.index, method='nearest').ffill().fillna(0.045)
         df_user['rf_period']  = df_user['irx_annual'] / 12
         df_user['excess_return'] = df_user['return'] - df_user['rf_period']
 
