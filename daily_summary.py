@@ -7,6 +7,7 @@ from config import config
 from api_manager import APIManager
 from db_manager import DBManager
 from data_processor import DataProcessor
+from shared_utils import parse_history_docs
 
 # .env 파일 로드 (로컬 실행 시 환경변수 주입)
 load_dotenv()
@@ -65,20 +66,7 @@ def main():
     # 히스토리 및 통계 데이터 로드 (MDD, Peak 계산용)
     history_resp = db_manager.fetch_history(id_token)
     history_docs = history_resp.get('documents', [])
-    history_cache = []
-    for doc in history_docs:
-        date_id = doc['name'].split('/')[-1]
-        f = doc.get('fields', {})
-        def get_val(field):
-            v = f.get(field, {})
-            return float(v.get('doubleValue', v.get('integerValue', 0)))
-        history_cache.append({
-            "date": date_id,
-            "f_asset": get_val('financial_asset'),
-            "t_asset": get_val('total_asset') or get_val('asset_value'),
-            "deposit": get_val('net_deposit')
-        })
-    history_cache.sort(key=lambda x: x['date'])
+    history_cache = parse_history_docs(history_docs)
 
     # 수익률 및 증감률 계산
     roi, growth = data_processor.calculate_metrics(f_total, all_total, history_cache)

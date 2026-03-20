@@ -1,14 +1,18 @@
+from __future__ import annotations
+
+from typing import Any
+
 import requests
 from urllib.parse import quote
 
 class DBManager:
-    def __init__(self, project_id, api_key):
+    def __init__(self, project_id: str, api_key: str) -> None:
         self.project_id = project_id
         self.api_key = api_key
         self.base_url = f"https://firestore.googleapis.com/v1/projects/{self.project_id}/databases/(default)/documents"
         self.auth_url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={self.api_key}"
 
-    def _handle_response(self, response):
+    def _handle_response(self, response: requests.Response) -> dict[str, Any]:
         try:
             response.raise_for_status()
             return response.json()
@@ -22,25 +26,25 @@ class DBManager:
                 pass
             raise e
 
-    def login(self, email, password):
+    def login(self, email: str, password: str) -> dict[str, Any]:
         payload = {"email": email, "password": password, "returnSecureToken": True}
         res = requests.post(self.auth_url, json=payload)
         return self._handle_response(res)
 
-    def refresh_token(self, refresh_token):
+    def refresh_token(self, refresh_token: str) -> dict[str, Any]:
         url = f"https://securetoken.googleapis.com/v1/token?key={self.api_key}"
         payload = {"grant_type": "refresh_token", "refresh_token": refresh_token}
         res = requests.post(url, json=payload)
         return self._handle_response(res)
 
-    def refresh_auth_token(self, refresh_token):
+    def refresh_auth_token(self, refresh_token: str) -> tuple[str | None, str | None]:
         """Refresh Token을 사용하여 ID Token을 갱신하고 파싱 된 결과를 반환"""
         res = self.refresh_token(refresh_token)
         new_id_token = res.get('id_token') or res.get('idToken')
         new_refresh_token = res.get('refresh_token') or res.get('refreshToken')
         return new_id_token, new_refresh_token
 
-    def get_friendly_error_message(self, error_msg):
+    def get_friendly_error_message(self, error_msg: str) -> str:
         """Firebase 에러 메시지를 사용자 친화적인 메시지로 변환"""
         error_map = {
             "EMAIL_NOT_FOUND": "존재하지 않는 이메일입니다.",
@@ -54,51 +58,51 @@ class DBManager:
                 return msg
         return f"오류: {error_msg}"
 
-    def fetch_portfolio(self, id_token):
+    def fetch_portfolio(self, id_token: str) -> dict[str, Any]:
         url = f"{self.base_url}/portfolio"
         headers = {"Authorization": f"Bearer {id_token}"}
         res = requests.get(url, headers=headers)
         return self._handle_response(res)
 
-    def save_asset(self, id_token, name, data):
+    def save_asset(self, id_token: str, name: str, data: dict[str, Any]) -> dict[str, Any]:
         safe_name = quote(name, safe='')
         url = f"{self.base_url}/portfolio/{safe_name}"
         headers = {"Authorization": f"Bearer {id_token}"}
         res = requests.patch(url, headers=headers, json=data)
         return self._handle_response(res)
 
-    def delete_asset(self, id_token, name):
+    def delete_asset(self, id_token: str, name: str) -> dict[str, Any]:
         safe_name = quote(name, safe='')
         url = f"{self.base_url}/portfolio/{safe_name}"
         headers = {"Authorization": f"Bearer {id_token}"}
         res = requests.delete(url, headers=headers)
         return self._handle_response(res)
 
-    def fetch_history(self, id_token):
+    def fetch_history(self, id_token: str) -> dict[str, Any]:
         url = f"{self.base_url}/history"
         headers = {"Authorization": f"Bearer {id_token}"}
         res = requests.get(url, headers=headers)
         return self._handle_response(res)
 
-    def save_history(self, id_token, date_id, data):
+    def save_history(self, id_token: str, date_id: str, data: dict[str, Any]) -> dict[str, Any]:
         url = f"{self.base_url}/history/{date_id}"
         headers = {"Authorization": f"Bearer {id_token}"}
         res = requests.patch(url, headers=headers, json=data)
         return self._handle_response(res)
 
-    def delete_history(self, id_token, date_id):
+    def delete_history(self, id_token: str, date_id: str) -> dict[str, Any]:
         url = f"{self.base_url}/history/{date_id}"
         headers = {"Authorization": f"Bearer {id_token}"}
         res = requests.delete(url, headers=headers)
         return self._handle_response(res)
 
-    def get_stats(self, id_token):
+    def get_stats(self, id_token: str) -> dict[str, Any]:
         url = f"{self.base_url}/config/stats"
         headers = {"Authorization": f"Bearer {id_token}"}
         res = requests.get(url, headers=headers)
         return self._handle_response(res)
 
-    def update_stats(self, id_token, data):
+    def update_stats(self, id_token: str, data: dict[str, Any]) -> dict[str, Any]:
         url = f"{self.base_url}/config/stats"
         headers = {"Authorization": f"Bearer {id_token}"}
         res = requests.patch(url, headers=headers, json=data)

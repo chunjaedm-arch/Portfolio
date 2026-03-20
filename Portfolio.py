@@ -26,6 +26,7 @@ from dashboard_view import DashboardView
 from data_exporter import DataExporter
 from calculator_dialog import CalculatorDialog
 from style_manager import StyleManager
+from shared_utils import parse_history_docs
 
 class Preloader(QThread):
     finished_data = pyqtSignal(dict)
@@ -392,24 +393,7 @@ class PortfolioApp(QMainWindow):
         try:
             data = self.db_manager.fetch_history(self.id_token)
             docs = data.get('documents', [])
-            self.history_cache = []
-            for doc in docs:
-                date_id = doc['name'].split('/')[-1]
-                f = doc.get('fields', {})
-                
-                def get_val(field):
-                    v = f.get(field, {})
-                    return float(v.get('doubleValue', v.get('integerValue', 0)))
-
-                self.history_cache.append({
-                    "date": date_id,
-                    "f_asset": get_val('financial_asset'),
-                    "t_asset": get_val('total_asset') or get_val('asset_value'),
-                    "deposit": get_val('net_deposit'),
-                    "memo": f.get('memo', {}).get('stringValue', '')
-                })
-            
-            self.history_cache.sort(key=lambda x: x['date'])
+            self.history_cache = parse_history_docs(docs)
             self.history_loaded = True
             self.history_view.update_table(self.history_cache, self.current_f_total, self.current_all_total)
             

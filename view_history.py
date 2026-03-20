@@ -5,6 +5,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal, QSettings
 from PyQt6.QtGui import QColor, QFont
 from datetime import datetime
+from shared_utils import HARDCODED_YIELDS, calc_yearly_yield
 
 class HistoryView(QWidget):
     save_snapshot_requested = pyqtSignal(str, float, float, float, str)
@@ -193,132 +194,46 @@ class HistoryView(QWidget):
         tv_yield.header().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
         tv_yield.header().setDefaultAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        hardcoded_yields = {
-            "2011": 19.33, "2012": -4.83, "2013": -25.05, "2014": -33.87,
-            "2015": 41.44, "2016": 11.57, "2017": 225.87, "2018": 10.28,
-            "2019": 11.29, "2020": 33.68, "2021": 52.01, "2022": -0.36,
-            "2023": 17.10, "2024": 16.38
-        }
+        # 공통 모듈에서 연도별 수익률 계산
+        yield_rows = calc_yearly_yield(history_cache, current_f_asset)
 
-        yearly_summary = {}
-        prev_f_asset = 0
-        
-        if history_cache:
-            for record in history_cache:
-                try:
-                    dt = datetime.strptime(record['date'], "%Y-%m-%d")
-                    # 회계 마감일 기준: 1월 15일 이전 기록은 전년도로 처리
-                    if dt.month == 1 and dt.day <= 15:
-                        year = str(dt.year - 1)
-                    else:
-                        year = str(dt.year)
-                except ValueError:
-                    year = record['date'][:4]
+        # 내보내기용 데이터 저장
+        self.yearly_yield_data = [
+            {"연도": r["year"], "순입고": r["deposit"], "투자수익": r["profit"], "수익률": r["roi"]}
+            for r in yield_rows
+        ]
 
-                current_f = record['f_asset']
-                deposit = record['deposit']
-                
-                # 투자수익 = 현재자산 - 이전자산 - 순입고
-                profit = (current_f - prev_f_asset - deposit) if prev_f_asset > 0 else 0
-                # 투자수익률(월간 또는 기록간)
-                roi = (profit / prev_f_asset) if prev_f_asset > 0 else 0
-
-                if year not in yearly_summary:
-                    yearly_summary[year] = {
-                        'monthly_returns': [],
-                        'deposit_sum': 0,
-                        'profit_sum': 0,
-                        'has_actual_data': False # 실질적 성과 데이터 존재 여부
-                    }
-                
-                # 이전 자산이 있을 때만 실질적인 성과(수익)가 발생한 것으로 간주
-                if prev_f_asset > 0:
-                    yearly_summary[year]['monthly_returns'].append(roi)
-                    yearly_summary[year]['profit_sum'] += profit
-                    yearly_summary[year]['has_actual_data'] = True
-                
-                yearly_summary[year]['deposit_sum'] += deposit
-                
-                prev_f_asset = current_f
-
-        # 현재 시점의 실시간 데이터 반영 (필요한 경우)
-        if current_f_asset > 0 and prev_f_asset > 0:
-            now = datetime.now()
-            if now.month == 1 and now.day <= 15:
-                year = str(now.year - 1)
-            else:
-                year = str(now.year)
-            
-            # 현재 시세 기준 수익 계산
-            curr_profit = (current_f_asset - prev_f_asset)
-            curr_roi = curr_profit / prev_f_asset
-            
-            if year not in yearly_summary:
-                yearly_summary[year] = {
-                    'monthly_returns': [],
-                    'deposit_sum': 0,
-                    'profit_sum': 0,
-                    'has_actual_data': True
-                }
-            yearly_summary[year]['monthly_returns'].append(curr_roi)
-            yearly_summary[year]['profit_sum'] += curr_profit
-            yearly_summary[year]['has_actual_data'] = True
-
-        all_years = set(hardcoded_yields.keys()) | set(yearly_summary.keys())
-        self.yearly_yield_data = []
-
-        for year in sorted(all_years, reverse=True):
-            is_history_present = year in yearly_summary
-            is_actual_present = is_history_present and yearly_summary[year]['has_actual_data']
-            
-            if year in hardcoded_yields:
-                roi = hardcoded_yields[year]
-            elif is_actual_present:
-                returns = yearly_summary[year]['monthly_returns']
-                product_val = 1.0
-                for r in returns:
-                    product_val *= (1 + r)
-                roi = (product_val - 1) * 100
-            else:
-                # 하드코딩된 데이터도 없고, 실질적인 히스토리(수익 계산 가능 데이터)도 없으면 스킵
-                if not is_history_present: continue
-                # 상세 내역은 있으나 초기 데이터뿐인 경우 처리 (아래에서 공란으로 표시됨)
-                roi = 0
-
-            dep_sum = yearly_summary[year]['deposit_sum'] if is_actual_present else None
-            pft_sum = yearly_summary[year]['profit_sum'] if is_actual_present else None
-
-            self.yearly_yield_data.append({
-                "연도": f"{year}년", 
-                "순입고": f"{dep_sum:+,.0f}" if dep_sum is not None else "",
-                "투자수익": f"{pft_sum:+,.0f}" if pft_sum is not None else "",
-                "수익률": f"{roi:+.2f}%" if is_actual_present or year in hardcoded_yields else ""
-            })
+        for row in yield_rows:
+            has_actual = row["has_actual"]
+            in_hardcoded = row["in_hardcoded"]
+            roi_val = row["roi_val"]
 
             item = QTreeWidgetItem(tv_yield)
-            item.setText(0, f"{year}년")
-            
-            if is_actual_present:
-                item.setText(1, f"{dep_sum:+,.0f}")
-                item.setText(2, f"{pft_sum:+,.0f}")
-                item.setText(3, f"{roi:+.2f}%")
-                if dep_sum < 0: item.setForeground(1, QColor("#FF6B6B"))
-                if pft_sum < 0: item.setForeground(2, QColor("#FF6B6B"))
-            elif year in hardcoded_yields:
+            item.setText(0, row["year"])
+
+            if has_actual:
+                item.setText(1, row["deposit"])
+                item.setText(2, row["profit"])
+                item.setText(3, row["roi"])
+                if row["deposit_sum"] is not None and row["deposit_sum"] < 0:
+                    item.setForeground(1, QColor("#FF6B6B"))
+                if row["profit_sum"] is not None and row["profit_sum"] < 0:
+                    item.setForeground(2, QColor("#FF6B6B"))
+            elif in_hardcoded:
                 item.setText(1, "")
                 item.setText(2, "")
-                item.setText(3, f"{roi:+.2f}%")
+                item.setText(3, row["roi"])
             else:
                 item.setText(1, "")
                 item.setText(2, "")
                 item.setText(3, "")
-            
-            if (is_actual_present or year in hardcoded_yields):
-                if roi < 0:
-                    item.setForeground(3, QColor("#FF6B6B")) 
-                elif roi >= 10.0:
-                    item.setForeground(3, QColor("#4DABF7")) 
-                
+
+            if roi_val is not None and (has_actual or in_hardcoded):
+                if roi_val < 0:
+                    item.setForeground(3, QColor("#FF6B6B"))
+                elif roi_val >= 10.0:
+                    item.setForeground(3, QColor("#4DABF7"))
+
             item.setTextAlignment(0, Qt.AlignmentFlag.AlignCenter)
             item.setTextAlignment(1, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             item.setTextAlignment(2, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)

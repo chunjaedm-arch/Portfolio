@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
 export interface AnalysisMetrics {
   cagr_user: number;    cagr_spy: number;    cagr_kospi: number
@@ -15,9 +15,15 @@ export interface MatrixRow {
   [period: string]: string
 }
 
+interface PlotlyFigure {
+  data: unknown[]
+  layout: Record<string, unknown>
+}
+
 interface AnalysisViewProps {
   metrics: AnalysisMetrics | null
   chartHtml: string
+  chartJson?: PlotlyFigure | null
   matrix: MatrixRow[]
 }
 
@@ -39,7 +45,38 @@ function MetricCard({ title, userVal, spyVal, kospiVal, isPct = true }:
   )
 }
 
-export default function AnalysisView({ metrics, chartHtml, matrix }: AnalysisViewProps) {
+function AnalysisPlotlyChart({ figure }: { figure: PlotlyFigure }) {
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!ref.current || !figure) return
+
+    const render = () => {
+      if (window.Plotly && ref.current) {
+        window.Plotly.react(ref.current, figure.data, {
+          ...figure.layout,
+          autosize: true,
+        }, { responsive: true, displayModeBar: false })
+      }
+    }
+
+    if (window.Plotly) {
+      render()
+    } else {
+      const interval = setInterval(() => {
+        if (window.Plotly) {
+          clearInterval(interval)
+          render()
+        }
+      }, 100)
+      return () => clearInterval(interval)
+    }
+  }, [figure])
+
+  return <div ref={ref} className="w-full h-full" style={{ background: '#1e1e2e' }} />
+}
+
+export default function AnalysisView({ metrics, chartHtml, chartJson, matrix }: AnalysisViewProps) {
   const [page, setPage] = useState<'dashboard' | 'matrix'>('dashboard')
 
   const btnStyle = (active: boolean) => ({
@@ -89,7 +126,9 @@ export default function AnalysisView({ metrics, chartHtml, matrix }: AnalysisVie
 
           {/* 누적수익률 + DD 차트 */}
           <div className="rounded-lg overflow-hidden" style={{ height: '55vh', border: '1px solid #2d2d3f' }}>
-            {chartHtml ? (
+            {chartJson ? (
+              <AnalysisPlotlyChart figure={chartJson} />
+            ) : chartHtml ? (
               <iframe srcDoc={chartHtml} className="w-full h-full"
                 style={{ border: 'none', background: '#1e1e2e' }} title="분석 차트" />
             ) : (

@@ -20,8 +20,9 @@ from db_manager import DBManager
 from data_processor import DataProcessor
 from config import config
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from chart_generator import gen_alloc_html, gen_history_chart_html
-from analysis_generator import run_analysis, calc_yearly_yield
+from chart_generator import gen_alloc_html, gen_alloc_json, gen_history_chart_html, gen_history_chart_json
+from analysis_generator import run_analysis
+from shared_utils import parse_history_docs, calc_yearly_yield
 
 app = FastAPI(title="Portfolio API")
 
@@ -174,20 +175,7 @@ async def get_portfolio():
         peak_date = "-"
         try:
             h_data = _with_auth(db.fetch_history)
-            for doc in h_data.get("documents", []):
-                date_id = doc["name"].split("/")[-1]
-                f = doc.get("fields", {})
-                def gv(field):
-                    v = f.get(field, {})
-                    return float(v.get("doubleValue", v.get("integerValue", 0)))
-                history_cache.append({
-                    "date": date_id,
-                    "f_asset": gv("financial_asset"),
-                    "t_asset": gv("total_asset") or gv("asset_value"),
-                    "deposit": gv("net_deposit"),
-                    "memo": f.get("memo", {}).get("stringValue", "")
-                })
-            history_cache.sort(key=lambda x: x["date"])
+            history_cache = parse_history_docs(h_data.get("documents", []))
 
             stats = _with_auth(db.get_stats)
             sf = stats.get("fields", {})
@@ -255,29 +243,9 @@ async def delete_asset(name: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ─── 히스토리 공통 파싱 헬퍼 ─────────────────────────────
-def _parse_history_docs(docs: list) -> list:
-    cache = []
-    for doc in docs:
-        date_id = doc["name"].split("/")[-1]
-        f = doc.get("fields", {})
-        def gv(field):
-            v = f.get(field, {})
-            return float(v.get("doubleValue", v.get("integerValue", 0)))
-        cache.append({
-            "date": date_id,
-            "f_asset": gv("financial_asset"),
-            "t_asset": gv("total_asset") or gv("asset_value"),
-            "deposit": gv("net_deposit"),
-            "memo": f.get("memo", {}).get("stringValue", "")
-        })
-    cache.sort(key=lambda x: x["date"])
-    return cache
-
-
 def _get_history_cache() -> list:
     h_data = _with_auth(db.fetch_history)
-    return _parse_history_docs(h_data.get("documents", []))
+    return parse_history_docs(h_data.get("documents", []))
 
 
 # ─── 엔드포인트: 히스토리 조회 ───────────────────────────
@@ -345,9 +313,15 @@ async def get_charts():
         items   = port.get("items", []) if isinstance(port, dict) else port.body  # type: ignore
         history = _get_history_cache()
         re_val  = sum(i['row_val'] for i in (port["items"] if isinstance(port, dict) else []) if i.get('main') == '부동산')
-        alloc_html   = gen_alloc_html(port["items"] if isinstance(port, dict) else [])
+        port_items = port["items"] if isinstance(port, dict) else []
+        alloc_html   = gen_alloc_html(port_items)
         history_html = gen_history_chart_html(history, re_val)
-        return {"alloc_html": alloc_html, "history_html": history_html}
+        alloc_json   = gen_alloc_json(port_items)
+        history_json = gen_history_chart_json(history, re_val)
+        return {
+            "alloc_html": alloc_html, "history_html": history_html,
+            "alloc_json": alloc_json, "history_json": history_json,
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

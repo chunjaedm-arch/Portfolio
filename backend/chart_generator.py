@@ -1,13 +1,17 @@
 """view_chart.py의 Plotly 차트 생성 로직 (PyQt 의존성 제거)"""
+from __future__ import annotations
+
+import json
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from datetime import datetime
 
 
-def gen_alloc_html(items: list) -> str:
+# ─── 자산 배분 트리맵 ──────────────────────────────────────────
+def _build_alloc_fig(items: list) -> go.Figure | None:
     if not items:
-        return _empty_html("자산 데이터가 없습니다.")
+        return None
 
     df = pd.DataFrame(items)
     df['label'] = df.apply(
@@ -41,12 +45,25 @@ def gen_alloc_html(items: list) -> str:
         uniformtext=dict(minsize=8, mode='hide'),
         margin=dict(t=30, b=10, l=10, r=10)
     )
+    return fig
+
+
+def gen_alloc_html(items: list) -> str:
+    fig = _build_alloc_fig(items)
+    if fig is None:
+        return _empty_html("자산 데이터가 없습니다.")
     return _wrap_html(fig.to_html(include_plotlyjs='cdn', full_html=True))
 
 
-def gen_history_chart_html(history_cache: list, real_estate_val: float = 0) -> str:
+def gen_alloc_json(items: list) -> dict | None:
+    """Plotly figure JSON (data + layout) — 프론트엔드에서 Plotly.react() 로 렌더링."""
+    fig = _build_alloc_fig(items)
+    return json.loads(fig.to_json()) if fig else None
+
+
+def _build_history_fig(history_cache: list, real_estate_val: float = 0) -> go.Figure | None:
     if not history_cache:
-        return _empty_html("히스토리 데이터가 없습니다.")
+        return None
 
     df = pd.DataFrame(history_cache)
 
@@ -126,7 +143,20 @@ def gen_history_chart_html(history_cache: list, real_estate_val: float = 0) -> s
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         margin=dict(t=40, b=20, l=20, r=20)
     )
+    return fig
+
+
+def gen_history_chart_html(history_cache: list, real_estate_val: float = 0) -> str:
+    fig = _build_history_fig(history_cache, real_estate_val)
+    if fig is None:
+        return _empty_html("히스토리 데이터가 없습니다.")
     return _wrap_html(fig.to_html(include_plotlyjs='cdn', full_html=True))
+
+
+def gen_history_chart_json(history_cache: list, real_estate_val: float = 0) -> dict | None:
+    """Plotly figure JSON (data + layout) — 프론트엔드에서 Plotly.react() 로 렌더링."""
+    fig = _build_history_fig(history_cache, real_estate_val)
+    return json.loads(fig.to_json()) if fig else None
 
 
 def _empty_html(msg: str) -> str:

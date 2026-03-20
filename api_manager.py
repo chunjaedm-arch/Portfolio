@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import yfinance as yf
 import requests
 from bs4 import BeautifulSoup
@@ -6,7 +8,7 @@ import FinanceDataReader as fdr
 from datetime import datetime, timedelta
 
 class APIManager:
-    def fetch_exchange_rates(self):
+    def fetch_exchange_rates(self) -> tuple[float | None, float | None, float | None, float | None, str | None]:
         try:
             usd_df = yf.Ticker("USDKRW=X").history(period="1d")
             jpy_df = yf.Ticker("JPYKRW=X").history(period="1d")
@@ -26,7 +28,7 @@ class APIManager:
         # 2차 시도: FinanceDataReader (Fallback)
         return self._fetch_exchange_rates_fdr()
 
-    def _fetch_exchange_rates_fdr(self):
+    def _fetch_exchange_rates_fdr(self) -> tuple[float | None, float | None, float | None, float | None, str | None]:
         try:
             # 최근 7일 데이터 조회 (주말/휴일 고려)
             start_date = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
@@ -50,7 +52,7 @@ class APIManager:
         
         return None, None, None, None, None
 
-    def fetch_market_indices(self):
+    def fetch_market_indices(self) -> dict[str, tuple[float, float]]:
         indices = {
             "KOSPI": "^KS11",
             "KOSDAQ": "^KQ11",
@@ -87,7 +89,7 @@ class APIManager:
                 print(f"Index {name} fetch failed: {e}")
         return results
 
-    def get_upbit_price(self, symbol):
+    def get_upbit_price(self, symbol: str) -> tuple[float | None, float | None]:
         market = f"KRW-{symbol.upper()}"
         url = f"https://api.upbit.com/v1/ticker?markets={market}"
         try:
@@ -101,7 +103,7 @@ class APIManager:
             return None, None
         return None, None
 
-    def get_detailed_gold_prices(self, usd_rate):
+    def get_detailed_gold_prices(self, usd_rate: float) -> dict[str, float]:
         results = {'int_spot': 0.0, 'int_future': 0.0, 'krx_spot': 0.0, 'domestic_spot': 0.0, 'int_spot_usd': 0.0, 'iau_usd': 0.0, 'iau_krw_g': 0.0}
         
         if not usd_rate:
@@ -147,7 +149,7 @@ class APIManager:
 
         return results
     
-    def _get_krx_gold_price(self):
+    def _get_krx_gold_price(self) -> float | None:
         url = "https://m.stock.naver.com/marketindex/metals/M04020000"
         headers = {'User-Agent': 'Mozilla/5.0'}
         try:
@@ -156,10 +158,11 @@ class APIManager:
             for s in soup.find_all("strong"):
                 if "원/g" in s.get_text():
                     return float(re.sub(r'[^0-9]', '', s.get_text()))
-        except: return None
+        except Exception:
+            return None
         return None
-    
-    def _get_domestic_gold_price(self):
+
+    def _get_domestic_gold_price(self) -> float | None:
         url = "https://m.stock.naver.com/marketindex/metals/CMDT_GD"
         headers = {'User-Agent': 'Mozilla/5.0'}
         try:
@@ -168,5 +171,6 @@ class APIManager:
             price_tag = soup.select_one("strong[class*='DetailInfo_price']")
             if price_tag:
                 return float(re.sub(r'[^0-9.]', '', price_tag.get_text()))
-        except: return None
+        except Exception:
+            return None
         return None
