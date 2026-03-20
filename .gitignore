@@ -26,6 +26,11 @@ web/.env*.local
 rule.md
 Rule.md
 
+# 코드 리뷰 파일 (취약점 정보 포함, 내부용)
+*REVIEW*.md
+*review*.md
+CODE_REVIEW.md
+
 # PyInstaller 빌드 잔재
 *.spec
 

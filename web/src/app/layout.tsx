@@ -13,6 +13,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ko">
+      <head>
+        <script src="https://cdn.plot.ly/plotly-2.35.2.min.js" defer></script>
+      </head>
       <body className="antialiased">{children}</body>
     </html>
   );

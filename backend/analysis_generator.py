@@ -1,4 +1,7 @@
 """view_analysis.py의 분석 로직 (PyQt 의존성 제거)"""
+from __future__ import annotations
+
+import json
 import pandas as pd
 import numpy as np
 import yfinance as yf
@@ -7,13 +10,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from datetime import datetime
 
-
-HARDCODED_YIELDS = {
-    "2011": 19.33, "2012": -4.83, "2013": -25.05, "2014": -33.87,
-    "2015": 41.44, "2016": 11.57, "2017": 225.87, "2018": 10.28,
-    "2019": 11.29, "2020": 33.68, "2021": 52.01, "2022": -0.36,
-    "2023": 17.10, "2024": 16.38
-}
+from shared_utils import HARDCODED_YIELDS, calc_yearly_yield  # noqa: F401 (calc_yearly_yield re-exported)
 
 
 def run_analysis(history_data: list, current_f_asset: float = 0.0) -> dict:
@@ -59,12 +56,12 @@ def run_analysis(history_data: list, current_f_asset: float = 0.0) -> dict:
         # KOSPI
         try:
             df_kospi = fdr.DataReader('^KS11', start_date, end_date)
-        except:
+        except Exception:
             df_kospi = pd.DataFrame()
         if df_kospi.empty:
             try:
                 df_kospi = yf.Ticker("^KS11").history(start=start_date, end=end_date)
-            except:
+            except Exception:
                 pass
         # IRX
         df_irx = yf.Ticker("^IRX").history(start=start_date, end=end_date)
@@ -164,7 +161,9 @@ def run_analysis(history_data: list, current_f_asset: float = 0.0) -> dict:
             cum_k = (1 + df_kospi['return']).cumprod()
             df_kospi['dd'] = cum_k / cum_k.cummax() - 1
 
-        chart_html = _gen_analysis_chart(df_user, df_spy, df_kospi)
+        analysis_fig = _build_analysis_fig(df_user, df_spy, df_kospi)
+        chart_html = _fig_to_html(analysis_fig)
+        chart_json = json.loads(analysis_fig.to_json()) if analysis_fig else None
 
         # 매트릭스 테이블용 직렬화
         periods_order = ['All','2M','3M','6M','1Y','1.5Y','2Y','2.5Y','3Y','3.5Y','4Y','4.5Y','5Y']
@@ -197,14 +196,14 @@ def run_analysis(history_data: list, current_f_asset: float = 0.0) -> dict:
                     row[p] = "-"
             matrix_rows.append(row)
 
-        return {"metrics": metrics, "chart_html": chart_html, "matrix": matrix_rows}
+        return {"metrics": metrics, "chart_html": chart_html, "chart_json": chart_json, "matrix": matrix_rows}
 
     except Exception as e:
         print(f"Analysis error: {e}")
-        return {"metrics": {}, "chart_html": _empty_html(f"분석 오류: {e}"), "matrix": []}
+        return {"metrics": {}, "chart_html": _empty_html(f"분석 오류: {e}"), "chart_json": None, "matrix": []}
 
 
-def _gen_analysis_chart(df_user, df_spy, df_kospi) -> str:
+def _build_analysis_fig(df_user, df_spy, df_kospi) -> go.Figure:
     fig = make_subplots(
         rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.1,
         row_heights=[0.65, 0.35],
@@ -248,67 +247,12 @@ def _gen_analysis_chart(df_user, df_spy, df_kospi) -> str:
     fig.update_yaxes(title_text="수익률 (%)", row=1, col=1, gridcolor='#404040', zerolinecolor='#666')
     fig.update_yaxes(title_text="낙폭 (%)",   row=2, col=1, gridcolor='#404040', zerolinecolor='#666')
     fig.update_xaxes(gridcolor='#404040')
+    return fig
+
+
+def _fig_to_html(fig: go.Figure) -> str:
     html = fig.to_html(include_plotlyjs='cdn', full_html=True)
     return html.replace('<body>', '<body style="background-color:#1e1e2e;margin:0;">')
-
-
-def calc_yearly_yield(history_cache: list, current_f_asset: float = 0) -> list:
-    yearly_summary = {}
-    prev_f = 0
-    for record in history_cache:
-        try:
-            from datetime import datetime as dt
-            d = dt.strptime(record['date'], "%Y-%m-%d")
-            year = str(d.year - 1) if (d.month == 1 and d.day <= 15) else str(d.year)
-        except:
-            year = record['date'][:4]
-        f, dep = record['f_asset'], record['deposit']
-        profit = (f - prev_f - dep) if prev_f > 0 else 0
-        roi    = (profit / prev_f) if prev_f > 0 else 0
-        if year not in yearly_summary:
-            yearly_summary[year] = {'monthly_returns': [], 'deposit_sum': 0, 'profit_sum': 0, 'has_actual': False}
-        if prev_f > 0:
-            yearly_summary[year]['monthly_returns'].append(roi)
-            yearly_summary[year]['profit_sum'] += profit
-            yearly_summary[year]['has_actual'] = True
-        yearly_summary[year]['deposit_sum'] += dep
-        prev_f = f
-
-    if current_f_asset > 0 and prev_f > 0:
-        from datetime import datetime as dt
-        now = dt.now()
-        year = str(now.year - 1) if (now.month == 1 and now.day <= 15) else str(now.year)
-        curr_profit = current_f_asset - prev_f
-        curr_roi    = curr_profit / prev_f
-        if year not in yearly_summary:
-            yearly_summary[year] = {'monthly_returns': [], 'deposit_sum': 0, 'profit_sum': 0, 'has_actual': True}
-        yearly_summary[year]['monthly_returns'].append(curr_roi)
-        yearly_summary[year]['profit_sum'] += curr_profit
-        yearly_summary[year]['has_actual'] = True
-
-    all_years = set(HARDCODED_YIELDS.keys()) | set(yearly_summary.keys())
-    rows = []
-    for year in sorted(all_years, reverse=True):
-        ys = yearly_summary.get(year)
-        has_actual = ys and ys['has_actual']
-        if year in HARDCODED_YIELDS:
-            roi = HARDCODED_YIELDS[year]
-        elif has_actual:
-            prod = 1.0
-            for r in ys['monthly_returns']:
-                prod *= (1 + r)
-            roi = (prod - 1) * 100
-        else:
-            if not ys: continue
-            roi = 0
-        rows.append({
-            "year":    f"{year}년",
-            "deposit": f"{ys['deposit_sum']:+,.0f}" if has_actual else "",
-            "profit":  f"{ys['profit_sum']:+,.0f}"  if has_actual else "",
-            "roi":     f"{roi:+.2f}%" if (has_actual or year in HARDCODED_YIELDS) else "",
-            "roi_val": roi if (has_actual or year in HARDCODED_YIELDS) else None,
-        })
-    return rows
 
 
 def _empty_html(msg: str) -> str:

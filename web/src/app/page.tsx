@@ -31,11 +31,14 @@ export default function Home() {
   // 차트
   const [allocHtml, setAllocHtml]       = useState('')
   const [historyHtml, setHistoryHtml]   = useState('')
+  const [allocJson, setAllocJson]       = useState<Record<string, unknown> | null>(null)
+  const [historyJson, setHistoryJson]   = useState<Record<string, unknown> | null>(null)
   const [chartsLoaded, setChartsLoaded] = useState(false)
 
   // 분석
   const [analysisMetrics, setAnalysisMetrics] = useState<AnalysisMetrics | null>(null)
   const [analysisChartHtml, setAnalysisChartHtml] = useState('')
+  const [analysisChartJson, setAnalysisChartJson] = useState<Record<string, unknown> | null>(null)
   const [analysisMatrix, setAnalysisMatrix]   = useState<MatrixRow[]>([])
   const [analysisLoaded, setAnalysisLoaded]   = useState(false)
 
@@ -97,6 +100,8 @@ export default function Home() {
       const raw = await (await fetch('/api/charts')).json()
       setAllocHtml(raw.alloc_html ?? '')
       setHistoryHtml(raw.history_html ?? '')
+      setAllocJson(raw.alloc_json ?? null)
+      setHistoryJson(raw.history_json ?? null)
       setChartsLoaded(true)
     } catch (e) { console.error(e) }
   }, [])
@@ -107,6 +112,7 @@ export default function Home() {
       const raw = await (await fetch('/api/analysis')).json()
       setAnalysisMetrics(raw.metrics ?? null)
       setAnalysisChartHtml(raw.chart_html ?? '')
+      setAnalysisChartJson(raw.chart_json ?? null)
       setAnalysisMatrix(raw.matrix ?? [])
       setAnalysisLoaded(true)
     } catch (e) { console.error(e) }
@@ -218,12 +224,12 @@ export default function Home() {
         )}
         {activeTab === 'chart' && (
           chartsLoaded
-            ? <ChartView allocHtml={allocHtml} historyHtml={historyHtml} />
+            ? <ChartView allocHtml={allocHtml} historyHtml={historyHtml} allocJson={allocJson as never} historyJson={historyJson as never} />
             : <Spinner label="차트 생성 중... (시간이 걸릴 수 있습니다)" />
         )}
         {activeTab === 'analysis' && (
           analysisLoaded
-            ? <AnalysisView metrics={analysisMetrics} chartHtml={analysisChartHtml} matrix={analysisMatrix} />
+            ? <AnalysisView metrics={analysisMetrics} chartHtml={analysisChartHtml} chartJson={analysisChartJson as never} matrix={analysisMatrix} />
             : <Spinner label="분석 중... (SPY/KOSPI 데이터 로드 포함, 시간이 걸릴 수 있습니다)" />
         )}
       </div>

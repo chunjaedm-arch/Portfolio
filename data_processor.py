@@ -1,11 +1,16 @@
+from __future__ import annotations
+
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
+from typing import Any
+
 import yfinance as yf
 import requests
 from yahooquery import Ticker as YQTicker
 import re
 
 class DataProcessor:
-    def __init__(self):
+    def __init__(self) -> None:
         self.order_list = [
             ("부동산", "주택"), ("현금", "예금"), ("현금", "예수금"),
             ("현금", "초단기채권ETF"), ("투자", "주식"), ("투자", "주식+채권대용"), 
@@ -13,14 +18,14 @@ class DataProcessor:
             ("단타", "주식"), ("단타", "코인")
         ]
 
-    def get_rank(self, m, s):
+    def get_rank(self, m: str, s: str) -> int:
         m_c, s_c = (m.strip() if m else ""), (s.strip() if s else "")
         for i, (main, sub) in enumerate(self.order_list):
             if m_c == main and s_c == sub: 
                 return i
         return 99
 
-    def calculate_youth_account(self, data_text):
+    def calculate_youth_account(self, data_text: str) -> int | None:
         try:
             if not data_text or ":" not in data_text:
                 return None
@@ -50,7 +55,7 @@ class DataProcessor:
             return None
 
     # --- Refactored Helper Methods ---
-    def _calculate_bond_value(self, note, qty, brl_rate, usd_rate, jpy_rate, cny_rate):
+    def _calculate_bond_value(self, note: str, qty: float, brl_rate: float, usd_rate: float, jpy_rate: float, cny_rate: float) -> tuple[bool, float, float, float, float, str, str]:
         updated_at = datetime.now().strftime("%Y-%m-%d %H:%M") + " (KST)"
         market_status = "Open"
         
@@ -93,13 +98,13 @@ class DataProcessor:
             
         return False, 0, 0, 0, 0, updated_at, market_status
 
-    def _calculate_krx_gold(self, qty, gold_prices):
+    def _calculate_krx_gold(self, qty: float, gold_prices: dict[str, float]) -> tuple[bool, float, float, float, float, str, str]:
         current_p = gold_prices.get('krx_spot', 0)
         updated_at = datetime.now().strftime("%Y-%m-%d %H:%M") + " (KST)"
         market_status = "Open" if 9 <= datetime.now().hour < 16 else "Closed"
         return True, current_p * qty, 0.0, 0.0, 0.0, updated_at, market_status
 
-    def _calculate_crypto(self, ticker_upper, qty, api_manager):
+    def _calculate_crypto(self, ticker_upper: str, qty: float, api_manager: Any) -> tuple[bool, float, float, float, float, str, str]:
         symbol = ticker_upper.replace("KRW=", "").replace("=UPBIT", "")
         current_p, prev_p = api_manager.get_upbit_price(symbol)
         updated_at = datetime.now().strftime("%Y-%m-%d %H:%M") + " (KST)"
@@ -108,7 +113,7 @@ class DataProcessor:
             return True, current_p * qty, 0.0, 0.0, prev_p, updated_at, market_status
         return False, 0, 0, 0, 0, updated_at, "n/a"
 
-    def _calculate_stock(self, ticker, ticker_upper, qty):
+    def _calculate_stock(self, ticker: str, ticker_upper: str, qty: float) -> tuple[bool, float, float, float, float, str, str]:
         current_p = None
         prev_p = 0.0
         updated_at = "-"
@@ -144,7 +149,7 @@ class DataProcessor:
                         elif 'PRE' in m_state: market_status = 'Pre-Market'
                         elif 'POST' in m_state: market_status = 'Post-Market'
                         else: market_status = m_state.capitalize()
-                except: pass
+                except Exception: pass
 
             if market_status == "n/a" and 'last_dt' in locals():
                 t_min = last_dt.hour * 60 + last_dt.minute
@@ -154,7 +159,7 @@ class DataProcessor:
                 else: market_status = "Closed"
 
             try: prev_p = stock.fast_info.previous_close
-            except: prev_p = stock.info.get('previousClose', 0.0)
+            except Exception: prev_p = stock.info.get('previousClose', 0.0)
 
             if prev_p is None or prev_p == 0.0:
                 hist_daily = stock.history(period="2d")
@@ -212,7 +217,7 @@ class DataProcessor:
             return True, 0.0, current_p * qty, 0.0, prev_p, updated_at, market_status
 
     # --- Main Router Method ---
-    def calculate_asset_values(self, ticker, qty, note, gold_prices, api_manager, sub_category=None, usd_rate=0.0, jpy_rate=0.0, cny_rate=0.0, brl_rate=0.0):
+    def calculate_asset_values(self, ticker: str, qty: float, note: str, gold_prices: dict[str, float], api_manager: Any, sub_category: str | None = None, usd_rate: float = 0.0, jpy_rate: float = 0.0, cny_rate: float = 0.0, brl_rate: float = 0.0) -> tuple[bool, float, float, float, float, str, str]:
         updated_at = "-"
         market_status = "n/a"
         
@@ -244,7 +249,7 @@ class DataProcessor:
             print(f"[{ticker}] 자산 계산 오류: {e}")
             return False, 0, 0, 0, 0, updated_at, market_status
 
-    def get_price_display_info(self, ticker, qty, usd, jpy, krw, prev_close):
+    def get_price_display_info(self, ticker: str, qty: float, usd: float, jpy: float, krw: float, prev_close: float) -> tuple[str, str, str | None]:
         price_str = ""
         diff_str = ""
         diff_color = None
@@ -286,62 +291,72 @@ class DataProcessor:
         
         return price_str, diff_str, diff_color
 
-    def process_portfolio_data(self, docs, usd_rate, jpy_rate, cny_rate, brl_rate, gold_prices, api_manager):
-        items = []
+    def _parse_doc(self, doc: dict[str, Any]) -> dict[str, Any]:
+        """Firebase 문서를 아이템 dict로 파싱 (I/O 없음)."""
+        fields = doc.get('fields', {})
+        name = doc['name'].split('/')[-1]
+
+        def val(k: str) -> str:
+            return fields.get(k, {}).get('stringValue', "").strip()
+        def nval(k: str) -> float:
+            v = fields.get(k, {})
+            return float(v.get('doubleValue', v.get('integerValue', 0)))
+
+        return {
+            "name": name,
+            "main": val("대분류"),
+            "sub": val("소분류"),
+            "ticker": val("티커"),
+            "qty": nval("수량"),
+            "usd": nval("금액(달러)"),
+            "jpy": nval("금액(엔)"),
+            "krw": nval("금액(원)"),
+            "target_ratio": nval("목표비중"),
+            "note": val("비고"),
+        }
+
+    def process_portfolio_data(self, docs: list[dict[str, Any]], usd_rate: float, jpy_rate: float, cny_rate: float, brl_rate: float, gold_prices: dict[str, float], api_manager: Any) -> tuple[list[dict[str, Any]], float, float, float, str]:
+        items = [self._parse_doc(doc) for doc in docs]
         f_total, all_total, invest_total = 0.0, 0.0, 0.0
 
-        for doc in docs:
-            fields = doc.get('fields', {})
-            name = doc['name'].split('/')[-1]
-            
-            def val(k): return fields.get(k, {}).get('stringValue', "").strip()
-            def nval(k): 
-                v = fields.get(k, {})
-                return float(v.get('doubleValue', v.get('integerValue', 0)))
-
-            item = {
-                "name": name, 
-                "main": val("대분류"),
-                "sub": val("소분류"), 
-                "ticker": val("티커"),
-                "qty": nval("수량"), 
-                "usd": nval("금액(달러)"), 
-                "jpy": nval("금액(엔)"), 
-                "krw": nval("금액(원)"), 
-                "target_ratio": nval("목표비중"),
-                "note": val("비고")
-            }
-
-            success, c_krw, c_usd, c_jpy, c_prev, updated_at, market_status = self.calculate_asset_values(
-                item['ticker'], item['qty'], item['note'], gold_prices, api_manager, item['sub'], usd_rate, jpy_rate, cny_rate, brl_rate
+        # 시세 조회를 병렬로 실행 (I/O-bound yfinance 호출 최적화)
+        def _fetch(item: dict[str, Any]) -> tuple[dict[str, Any], tuple[bool, float, float, float, float, str, str]]:
+            result = self.calculate_asset_values(
+                item['ticker'], item['qty'], item['note'], gold_prices, api_manager,
+                item['sub'], usd_rate, jpy_rate, cny_rate, brl_rate
             )
-            if success:
-                item['krw'], item['usd'], item['jpy'] = c_krw, c_usd, c_jpy
-                item['prev_close'] = c_prev
-                item['updated_at'] = updated_at
-                item['market_status'] = market_status
-            else:
-                item['prev_close'] = 0.0
-                item['updated_at'] = updated_at
-                item['market_status'] = market_status
+            return item, result
 
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            futures = {executor.submit(_fetch, item): item for item in items}
+            for future in as_completed(futures):
+                item, (success, c_krw, c_usd, c_jpy, c_prev, updated_at, market_status) = future.result()
+                if success:
+                    item['krw'], item['usd'], item['jpy'] = c_krw, c_usd, c_jpy
+                    item['prev_close'] = c_prev
+                    item['updated_at'] = updated_at
+                    item['market_status'] = market_status
+                else:
+                    item['prev_close'] = 0.0
+                    item['updated_at'] = updated_at
+                    item['market_status'] = market_status
+
+        for item in items:
             item['unit_price_str'], item['diff_str'], item['diff_color'] = self.get_price_display_info(
-                item['ticker'], item['qty'], item['usd'], item['jpy'], item['krw'], item['prev_close']
+                item['ticker'], item['qty'], item['usd'], item['jpy'], item['krw'], item.get('prev_close', 0.0)
             )
 
             item['row_val'] = (item['usd'] * usd_rate) + (item['jpy'] * jpy_rate) + item['krw']
-            
+
             all_total += item['row_val']
             if item['main'] != "부동산": f_total += item['row_val']
             if item['main'] in ["투자", "단타"]: invest_total += item['row_val']
-            
-            items.append(item)
 
         items.sort(key=lambda x: self.get_rank(x['main'], x['sub']))
         
         return items, f_total, all_total, invest_total, "YahooQuery"
 
-    def calculate_metrics(self, f_total, all_total, history_cache):
+    def calculate_metrics(self, f_total: float, all_total: float, history_cache: list[dict[str, Any]]) -> tuple[float | None, float | None]:
         """수익률(ROI) 및 자산 증감률(Growth) 계산"""
         roi = None
         growth = None
@@ -362,7 +377,7 @@ class DataProcessor:
 
         return roi, growth
 
-    def get_deposit_sum_since(self, history_cache, base_date_str):
+    def get_deposit_sum_since(self, history_cache: list[dict[str, Any]], base_date_str: str) -> float:
         """특정 날짜(YYYYMMDD) 이후의 순입고 합계 계산"""
         deposit_sum = 0
         if base_date_str and base_date_str != "-" and history_cache:
@@ -373,7 +388,7 @@ class DataProcessor:
                     deposit_sum += record.get('deposit', 0)
         return deposit_sum
 
-    def calculate_mdd(self, f_total, peak_f_asset, peak_date_str, history_cache):
+    def calculate_mdd(self, f_total: float, peak_f_asset: float, peak_date_str: str, history_cache: list[dict[str, Any]]) -> tuple[float, float]:
         """DD(Drawdown) 계산 (순입고 보정 포함)"""
         mdd_val = 0
         mdd_pct = 0.0
@@ -392,7 +407,7 @@ class DataProcessor:
                 mdd_pct = (dd_amount / peak_f_asset) * 100
         return mdd_val, mdd_pct
 
-    def check_peak_update(self, current_f_total, peak_f_asset, peak_date_str, history_cache):
+    def check_peak_update(self, current_f_total: float, peak_f_asset: float, peak_date_str: str, history_cache: list[dict[str, Any]]) -> tuple[bool, float]:
         """
         Peak(전고점) 갱신 여부 판단 로직
         결과: (갱신여부, 보정된 실질 가치)
@@ -408,7 +423,7 @@ class DataProcessor:
         
         return is_new_peak, adjusted_current
 
-    def get_peak_update_payload(self, current_f_total, custom_date_str=None):
+    def get_peak_update_payload(self, current_f_total: float, custom_date_str: str | None = None) -> tuple[str, dict[str, Any]]:
         """Peak 갱신을 위한 페이로드 생성"""
         if custom_date_str and len(custom_date_str) == 8:
             peak_date = custom_date_str
