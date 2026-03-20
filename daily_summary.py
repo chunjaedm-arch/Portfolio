@@ -71,6 +71,9 @@ def main():
     # 수익률 및 증감률 계산
     roi, growth = data_processor.calculate_metrics(f_total, all_total, history_cache)
 
+    # 수익률 및 증감률 계산
+    roi, growth = data_processor.calculate_metrics(f_total, all_total, history_cache)
+
     stats_resp = db_manager.get_stats(id_token)
     stats_fields = stats_resp.get('fields', {})
     val = stats_fields.get('peak_financial_asset', {})
