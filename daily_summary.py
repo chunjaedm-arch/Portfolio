@@ -118,15 +118,22 @@ def main():
         kimp_str = f"{kimp:+.2f}%"
     message += f"🇰🇷 코인 김프: {kimp_str}\n"
 
-    # 금 프리미엄/스프레드
+    # 금 시세 및 프리미엄/스프레드
     g = gold_prices
     if g.get('int_spot', 0) > 0:
+        if g.get('krx_spot', 0) > 0:
+            message += f"🥇 KRX 금: ₩{g['krx_spot']:,.0f}/g\n"
+        if g.get('iau_krw_g', 0) > 0:
+            message += f"🇺🇸 IAU 금: ₩{g['iau_krw_g']:,.0f}/g\n"
+        if g.get('int_spot', 0) > 0:
+            message += f"🌍 국제 금: ₩{g['int_spot']:,.0f}/g\n"
+            
         krx_prem = ((g.get('krx_spot', 0) / g['int_spot']) - 1) * 100 if g.get('krx_spot') else 0
         iau_prem = ((g.get('iau_krw_g', 0) / g['int_spot']) - 1) * 100 if g.get('iau_krw_g') else 0
         spread = ((g.get('int_future', 0) / g['int_spot']) - 1) * 100 if g.get('int_future') else 0
         
-        message += f"🥇 KRX 금프: {krx_prem:+.2f}%\n"
-        message += f"🇺🇸 IAU 금프: {iau_prem:+.2f}%\n"
+        message += f"📈 KRX 금프: {krx_prem:+.2f}%\n"
+        message += f"📈 IAU 금프: {iau_prem:+.2f}%\n"
         message += f"⚖️ 금 스프레드: {spread:+.2f}%\n"
     
     message += "\n🌍 **주요 지수**\n"
