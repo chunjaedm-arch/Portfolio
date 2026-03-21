@@ -17,7 +17,8 @@
       "Bash(cmd.exe /c \"sc query Caddy\")",
       "Bash(cmd.exe /c \"sc query Caddy 2>&1\")",
       "Bash(cmd.exe /c \"sc query Caddy && netstat -an | findstr :443 && netstat -an | findstr :3000\")",
-      "WebFetch(domain:sdmtechnology.asuscomm.com)"
+      "WebFetch(domain:sdmtechnology.asuscomm.com)",
+      "Bash(npm run:*)"
     ]
   }
 }

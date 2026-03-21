@@ -496,7 +496,7 @@ async def export_data():
             analysis = await get_analysis()
             matrix   = analysis.get("matrix", []) if isinstance(analysis, dict) else []
             if matrix:
-                periods = ["All","1M","3M","6M","1Y","1.5Y","2Y","2.5Y","3Y","3.5Y","4Y","4.5Y","5Y"]
+                periods = ["All","2M","3M","6M","1Y","1.5Y","2Y","2.5Y","3Y","3.5Y","4Y","4.5Y","5Y"]
                 an_rows = [["지표"] + periods]
                 for row in matrix:
                     an_rows.append([row.get("label","")] + [row.get(p, "-") for p in periods])
