@@ -18,7 +18,13 @@
       "Bash(cmd.exe /c \"sc query Caddy 2>&1\")",
       "Bash(cmd.exe /c \"sc query Caddy && netstat -an | findstr :443 && netstat -an | findstr :3000\")",
       "WebFetch(domain:sdmtechnology.asuscomm.com)",
-      "Bash(npm run:*)"
+      "Bash(npm run:*)",
+      "Bash(pm2 list:*)",
+      "Bash(pm2 logs:*)",
+      "Bash(echo \"BUILD_EXIT:$?\")",
+      "Bash(pm2 restart:*)",
+      "Bash(cp c:/vscode/portfolio1.6/web/src/middleware.ts c:/vscode/portfolio1.6/web/src/proxy.ts)",
+      "Bash(rm c:/vscode/portfolio1.6/web/src/middleware.ts)"
     ]
   }
 }
