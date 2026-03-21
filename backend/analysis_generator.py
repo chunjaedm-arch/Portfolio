@@ -19,10 +19,7 @@ def run_analysis(history_data: list, current_f_asset: float = 0.0) -> dict:
 
     try:
         df_raw = pd.DataFrame(history_data)
-        if current_f_asset > 0:
-            new_row = {'date': datetime.now().strftime('%Y-%m-%d'), 'f_asset': current_f_asset,
-                       'deposit': 0, 't_asset': 0, 'memo': 'Live'}
-            df_raw = pd.concat([df_raw, pd.DataFrame([new_row])], ignore_index=True)
+        # Live 포인트는 메트릭 계산 후 오늘 날짜로 별도 추가
 
         df_raw['date'] = pd.to_datetime(df_raw['date'])
         df_raw.set_index('date', inplace=True)
@@ -90,6 +87,8 @@ def run_analysis(history_data: list, current_f_asset: float = 0.0) -> dict:
             m['excess_return'] = m['return'] - m['rf_period']
             return m
 
+        spy_latest_price   = df_spy['Close'].iloc[-1]   if not df_spy.empty   else None
+        kospi_latest_price = df_kospi['Close'].iloc[-1] if not df_kospi.empty else None
         df_spy   = proc_bench(df_spy)   if not df_spy.empty   else pd.DataFrame()
         df_kospi = proc_bench(df_kospi) if not df_kospi.empty else pd.DataFrame()
 
@@ -150,6 +149,44 @@ def run_analysis(history_data: list, current_f_asset: float = 0.0) -> dict:
             'sortino_user': all_u.get('sortino', 0),'sortino_spy': all_s.get('sortino', 0),'sortino_kospi': all_k.get('sortino', 0),
             'rf_avg':       all_u.get('rf_avg', 0),
         }
+
+        # Live 포인트 추가 (오늘 날짜로 차트에 표시, 메트릭 계산 제외)
+        today_dt = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        today_str = today_dt.strftime('%Y-%m-%d')
+        already_in_user = not df_user.empty and today_str in [d.strftime('%Y-%m-%d') for d in df_user.index]
+        if current_f_asset > 0 and not df_user.empty and not already_in_user:
+            last_u = df_user.iloc[-1]
+            live_ret = (current_f_asset - last_u['f_asset']) / last_u['f_asset'] if last_u['f_asset'] > 0 else 0
+            rf = last_u.get('irx_annual', 0.045)
+            df_user = pd.concat([df_user, pd.DataFrame({
+                'f_asset': [current_f_asset], 'deposit': [0],
+                'prev_f': [last_u['f_asset']], 'return': [live_ret],
+                'cum_return': [last_u['cum_return'] * (1 + live_ret)],
+                'irx_annual': [rf], 'rf_period': [rf / 12],
+                'excess_return': [live_ret - rf / 12],
+            }, index=[today_dt])])
+
+            if spy_latest_price is not None and not df_spy.empty:
+                last_s = df_spy.iloc[-1]
+                spy_ret = (spy_latest_price - last_s['Close']) / last_s['Close'] if last_s['Close'] > 0 else 0
+                rf_s = last_s.get('irx_annual', 0.045)
+                df_spy = pd.concat([df_spy, pd.DataFrame({
+                    'Close': [spy_latest_price], 'return': [spy_ret],
+                    'cum_return': [last_s['cum_return'] * (1 + spy_ret)],
+                    'irx_annual': [rf_s], 'rf_period': [rf_s / 12],
+                    'excess_return': [spy_ret - rf_s / 12],
+                }, index=[today_dt])])
+
+            if kospi_latest_price is not None and not df_kospi.empty:
+                last_k = df_kospi.iloc[-1]
+                kospi_ret = (kospi_latest_price - last_k['Close']) / last_k['Close'] if last_k['Close'] > 0 else 0
+                rf_k = last_k.get('irx_annual', 0.045)
+                df_kospi = pd.concat([df_kospi, pd.DataFrame({
+                    'Close': [kospi_latest_price], 'return': [kospi_ret],
+                    'cum_return': [last_k['cum_return'] * (1 + kospi_ret)],
+                    'irx_annual': [rf_k], 'rf_period': [rf_k / 12],
+                    'excess_return': [kospi_ret - rf_k / 12],
+                }, index=[today_dt])])
 
         # DD 계산
         cum_u = (1 + df_user['return']).cumprod()

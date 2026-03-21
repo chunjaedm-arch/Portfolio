@@ -30,19 +30,7 @@ class AnalysisWorker(QThread):
             # 1. User Data Processing (Monthly)
             df_raw = pd.DataFrame(self.history_data)
             
-            # [New] 현재 자산 상태 추가 (Live Data) -> 이번 달 데이터로 반영
-            if self.current_f_asset > 0:
-                new_row = {
-                    'date': datetime.now().strftime('%Y-%m-%d'),
-                    'f_asset': self.current_f_asset,
-                    'deposit': 0, # 현재 시점의 추가 입금은 0으로 가정 (순수 평가액 변동 반영)
-                    't_asset': 0,
-                    'memo': 'Live'
-                }
-                if df_raw.empty:
-                    df_raw = pd.DataFrame([new_row])
-                else:
-                    df_raw = pd.concat([df_raw, pd.DataFrame([new_row])], ignore_index=True)
+            # Live 포인트는 리샘플링 후 오늘 날짜로 별도 추가 (아래 참고)
             
             df_raw['date'] = pd.to_datetime(df_raw['date'])
             df_raw.set_index('date', inplace=True)
@@ -94,6 +82,9 @@ class AnalysisWorker(QThread):
                 start_date = datetime.now() # Fallback
             end_date = datetime.now()
             
+            spy_latest_price = None
+            kospi_latest_price = None
+
             # SPY (Benchmark)
             spy = yf.Ticker("SPY")
             df_spy = spy.history(start=start_date, end=end_date, auto_adjust=True)
@@ -148,6 +139,7 @@ class AnalysisWorker(QThread):
             if not df_spy.empty:
                 # SPY 월간 데이터로 변환 (매월 15일 기준: 15일 이하 마지막 거래일)
                 spy_close = df_spy['Close']
+                spy_latest_price = spy_close.iloc[-1] if not spy_close.empty else None
                 spy_15 = spy_close[spy_close.index.day <= 15]
                 df_spy_monthly = spy_15.groupby(spy_15.index.to_period('M')).last().to_frame()
                 df_spy_monthly.index = df_spy_monthly.index.to_timestamp() + pd.offsets.Day(14)
@@ -167,6 +159,7 @@ class AnalysisWorker(QThread):
             if not df_kospi.empty:
                 # KOSPI 월간 데이터 변환 (매월 15일 기준: 15일 이하 마지막 거래일)
                 kospi_close = df_kospi['Close']
+                kospi_latest_price = kospi_close.iloc[-1] if not kospi_close.empty else None
                 kospi_15 = kospi_close[kospi_close.index.day <= 15]
                 df_kospi_monthly = kospi_15.groupby(kospi_15.index.to_period('M')).last().to_frame()
                 df_kospi_monthly.index = df_kospi_monthly.index.to_timestamp() + pd.offsets.Day(14)
@@ -285,6 +278,45 @@ class AnalysisWorker(QThread):
                 'rf_avg': all_u.get('rf_avg', 0),
                 'matrix': matrix
             }
+
+            # Live 포인트 추가 (오늘 날짜로 차트에 표시, 메트릭 계산 제외)
+            today_dt = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+            today_str = today_dt.strftime('%Y-%m-%d')
+            already_in_user = not df_user.empty and today_str in [d.strftime('%Y-%m-%d') for d in df_user.index]
+            if self.current_f_asset > 0 and not df_user.empty and not already_in_user:
+                last_u = df_user.iloc[-1]
+                live_ret = (self.current_f_asset - last_u['f_asset']) / last_u['f_asset'] if last_u['f_asset'] > 0 else 0
+                rf = last_u.get('irx_annual', 0.045)
+                live_u = pd.DataFrame({
+                    'f_asset': [self.current_f_asset], 'deposit': [0],
+                    'prev_f': [last_u['f_asset']], 'return': [live_ret],
+                    'cum_return': [last_u['cum_return'] * (1 + live_ret)],
+                    'irx_annual': [rf], 'rf_period': [rf / 12],
+                    'excess_return': [live_ret - rf / 12],
+                }, index=[today_dt])
+                df_user = pd.concat([df_user, live_u])
+
+                if not df_spy.empty and spy_latest_price is not None:
+                    last_s = df_spy.iloc[-1]
+                    spy_ret = (spy_latest_price - last_s['Close']) / last_s['Close'] if last_s['Close'] > 0 else 0
+                    rf_s = last_s.get('irx_annual', 0.045)
+                    df_spy = pd.concat([df_spy, pd.DataFrame({
+                        'Close': [spy_latest_price], 'return': [spy_ret],
+                        'cum_return': [last_s['cum_return'] * (1 + spy_ret)],
+                        'irx_annual': [rf_s], 'rf_period': [rf_s / 12],
+                        'excess_return': [spy_ret - rf_s / 12],
+                    }, index=[today_dt])])
+
+                if not df_kospi.empty and kospi_latest_price is not None:
+                    last_k = df_kospi.iloc[-1]
+                    kospi_ret = (kospi_latest_price - last_k['Close']) / last_k['Close'] if last_k['Close'] > 0 else 0
+                    rf_k = last_k.get('irx_annual', 0.045)
+                    df_kospi = pd.concat([df_kospi, pd.DataFrame({
+                        'Close': [kospi_latest_price], 'return': [kospi_ret],
+                        'cum_return': [last_k['cum_return'] * (1 + kospi_ret)],
+                        'irx_annual': [rf_k], 'rf_period': [rf_k / 12],
+                        'excess_return': [kospi_ret - rf_k / 12],
+                    }, index=[today_dt])])
 
             # Attach DD to dataframes for plotting
             cum_all = (1 + df_user['return']).cumprod()
