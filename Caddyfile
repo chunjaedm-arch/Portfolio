@@ -1,0 +1,3 @@
+sdmtechnology.asuscomm.com {
+    reverse_proxy localhost:3000
+}

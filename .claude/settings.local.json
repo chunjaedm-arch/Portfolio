@@ -10,7 +10,14 @@
       "Bash(python -c \":*)",
       "Bash(grep -r \"symbol\\\\|ticker\" /c/vscode/portfolio1.6/*.py)",
       "Bash(grep -r history_cache /c/vscode/portfolio1.6 --include=*.py --include=*.ts --include=*.tsx)",
-      "Bash(grep -r \"save_history\\\\|fetch_history\\\\|delete_history\" /c/vscode/portfolio1.6 --include=*.ts --include=*.tsx)"
+      "Bash(grep -r \"save_history\\\\|fetch_history\\\\|delete_history\" /c/vscode/portfolio1.6 --include=*.ts --include=*.tsx)",
+      "Bash(cmd.exe /c \"where caddy\")",
+      "Bash(cmd.exe /c \"netsh advfirewall firewall show rule name=all dir=in | grep -i ''80\\\\|443\\\\|caddy''\")",
+      "Bash(cmd.exe /c \"netsh advfirewall firewall show rule name=all dir=in verbose\")",
+      "Bash(cmd.exe /c \"sc query Caddy\")",
+      "Bash(cmd.exe /c \"sc query Caddy 2>&1\")",
+      "Bash(cmd.exe /c \"sc query Caddy && netstat -an | findstr :443 && netstat -an | findstr :3000\")",
+      "WebFetch(domain:sdmtechnology.asuscomm.com)"
     ]
   }
 }
